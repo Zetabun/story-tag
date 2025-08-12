@@ -417,10 +417,15 @@
           }catch{}
 if(cturn && !players[cturn] && ids.length>0){ const newTurn=ids[0]; update(sesRef,{currentTurnUid:newTurn}); cturn=newTurn; }
           if(ids.length<2 && words.length>0){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
-          else setTurnBanner(viewTurn,players,myUid);
+          else {
+            const canFirstWord = (ids.length===1 && words.length===0 && myUid && players[myUid]);
+            if (canFirstWord) { turnBanner.textContent="Your first word…"; }
+            else setTurnBanner(viewTurn,players,myUid);
+          }
 
-          const isMyTurn=(viewTurn===myUid)&&(ids.length===2);
-          // Enforce button state based on turn
+          const canFirstWord = (ids.length===1 && words.length===0 && myUid && players[myUid]);
+          const isMyTurn = ((viewTurn===myUid)&&(ids.length===2)) || canFirstWord;
+          // Enforce button state based on turn (or first-word privilege for creator)
           submitBtn.disabled = !isMyTurn;
           wordInput.disabled = !isMyTurn;
 
@@ -459,7 +464,8 @@ if(cturn && !players[cturn] && ids.length>0){ const newTurn=ids[0]; update(sesRe
 
       const players=ses.players||{}; const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId);
       if(!myUid){ errorBox.textContent="Rejoin required."; return; }
-      if(ses.currentTurnUid!==myUid){ errorBox.textContent="Not your turn yet."; wordInput.value=""; return; }
+      const allowFirstWord = (Object.keys(players).length<=1) && (!(Array.isArray(ses.words)) || ses.words.length===0);
+      if(ses.currentTurnUid!==myUid && !allowFirstWord){ errorBox.textContent="Not your turn yet."; wordInput.value=""; return; }
       if(!WORD_RX.test(word)){ errorBox.textContent="Invalid word. Use letters, apostrophes, hyphens, optional .,!? at end."; return; }
 
       // Colour: use server-locked colour, else pending from localStorage, else fallback
