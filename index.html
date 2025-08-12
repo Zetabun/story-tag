@@ -24,7 +24,7 @@
     .ok { color:#69f0ae; }
     .err { color:#ff6b6b; }
     .warn { color:#ffd166; }
-    .story { background:#0c0f22; border:1px solid #2a2f4a; border-radius:12px; padding:14px; min-height:100px; }
+    .story { background:#0c0f22; border:1px solid #2a2f4a; border-radius:12px; padding:14px; min-height:100px; line-height:1.6; }
     .toolbar { display:flex; gap:8px; flex-wrap:wrap; }
     .pill { padding:6px 10px; border-radius:999px; background:#1c2142; border:1px solid #2a2f4a; color:#c6cdff; font-size:12px; display:flex; align-items:center; gap:8px; }
     .muted { color:#9aa3d7; font-size:14px; }
@@ -34,13 +34,35 @@
     .small { font-size:12px; color:#9aa3d7; }
     .divider { height:1px; background:#2a2f4a; margin:14px 0; }
     .tag { display:inline-flex; align-items:center; gap:6px; }
-    .dot { width:8px; height:8px; border-radius:50%; background:#666; box-shadow: 0 0 0 1px rgba(255,255,255,.12) inset; }
+    .dot { width:10px; height:10px; border-radius:50%; background:#666; box-shadow: 0 0 0 1px rgba(255,255,255,.12) inset; }
+    /* coloured words */
     .word { display:inline; }
     .word + .word::before { content: " "; }
+    /* colour swatch + input overlay */
     .colourWrap { position: relative; display: inline-block; }
-    .swatch{ width:28px; height:14px; border-radius:7px; border:1px solid #2a2f4a; background:#58a6ff; display:inline-block; vertical-align:middle; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+    .swatch{
+      width:28px; height:14px; border-radius:7px;
+      border:1px solid #2a2f4a; background:#58a6ff;
+      display:inline-block; vertical-align:middle;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+    }
     .swatchInput{ position:absolute; inset:0; opacity:0; cursor:pointer; }
-    a.link { color:#a6b3ff; text-decoration:none; cursor:pointer; }
+
+    /* Presence badge styling */
+    .presence { font-weight:600; }
+    .online { color:#69f0ae; }
+    .away { color:#ffd166; }
+    .offline { color:#b0b7e1; }
+
+    /* Mobile responsive tweaks */
+    @media (max-width: 768px) {
+      .row { gap:8px; }
+      .pill { font-size:11px; padding:6px 8px; }
+      .story { min-height:120px; font-size:16px; }
+      #wordInput { flex:1 1 100%; }
+      #submitBtn { flex:1 1 100%; }
+      .toolbar button { flex:1 1 calc(50% - 8px); }
+    }
   </style>
 </head>
 <body>
@@ -78,10 +100,18 @@
         <div class="row">
           <div class="pill">Session: <span id="sessionLabel"></span></div>
           <div class="pill">You:
-            <span class="tag"><span id="youDot" class="dot"></span><span id="youLabel" class="nameTag"></span></span>
+            <span class="tag">
+              <span id="youDot" class="dot"></span>
+              <span id="youLabel" class="nameTag"></span>
+              <span id="youPresence" class="presence offline">(offline)</span>
+            </span>
           </div>
           <div class="pill">Partner:
-            <span class="tag"><span id="peerDot" class="dot"></span><span id="peerLabel"></span></span>
+            <span class="tag">
+              <span id="peerDot" class="dot"></span>
+              <span id="peerLabel"></span>
+              <span id="peerPresence" class="presence offline">(offline)</span>
+            </span>
           </div>
           <div class="pill">Words: <span id="wordCount">0</span></div>
           <div class="pill">Status: <span id="statusDot">Waiting…</span></div>
@@ -129,7 +159,7 @@
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
     const firebaseConfig = {
-      apiKey: "AIzaSyCVOzSTr3lPRm1BRzKTJtdEG-nsdnVIhiM",
+      apiKey: "AIzaSyCVOzSTr3lPRm1BRzKTJtdEG-nsdnVIhiM", // <— NEW KEY
       authDomain: "zetabun-91b0c.firebaseapp.com",
       databaseURL: "https://zetabun-91b0c-default-rtdb.europe-west1.firebasedatabase.app",
       projectId: "zetabun-91b0c",
@@ -151,6 +181,7 @@
           sessionLabel = $("sessionLabel"),
           youLabel = $("youLabel"), peerLabel = $("peerLabel"),
           youDot = $("youDot"), peerDot = $("peerDot"),
+          youPresence = $("youPresence"), peerPresence = $("peerPresence"),
           wordCount = $("wordCount"), statusDot = $("statusDot"),
           storyBox = $("storyBox"), turnBanner = $("turnBanner"),
           wordInput = $("wordInput"), submitBtn = $("submitBtn"),
@@ -167,12 +198,10 @@
     }
     const clientId = getClientId();
 
-    // Local storage keys
-    const LS_KEY = "storytag_state_v1";                   // { sessionId, myName }
-    const REM_KEY = "storytag_remembered_sessions_v1";    // { [sessionId]: derivedKey }
-    const LAST_KEY = "storytag_last_session_v1";          // { sessionId, derivedKey, myName }
-
-    // Helpers: local storage
+    // Local storage
+    const LS_KEY = "storytag_state_v1"; // { sessionId, myName }
+    const REM_KEY = "storytag_remembered_sessions_v1"; // { [sessionId]: derivedKey }
+    const LAST_KEY = "storytag_last_session_v1"; // { sessionId, derivedKey, myName }
     function saveLocal(state) { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
     function loadLocal() { try { return JSON.parse(localStorage.getItem(LS_KEY) || "{}"); } catch { return {}; } }
     function loadRememberMap(){ try { return JSON.parse(localStorage.getItem(REM_KEY) || "{}"); } catch { return {}; } }
@@ -180,21 +209,19 @@
     function saveLastSession(obj){ localStorage.setItem(LAST_KEY, JSON.stringify(obj || {})); }
     function loadLastSession(){ try { return JSON.parse(localStorage.getItem(LAST_KEY) || "null"); } catch { return null; } }
 
+    // Presence thresholds
+    const ONLINE_MS = 20 * 1000;
+    const AWAY_MS = 2 * 60 * 1000;
+
+    // Friendly hints
     function setSavedHintText(sid){
       const map = loadRememberMap();
       if (sid && map[sid]) {
-        savedHint.innerHTML = `Saved on this device — password optional. <a id="forgetLink" class="link">Forget</a>`;
-        setTimeout(() => {
-          const forget = document.getElementById("forgetLink");
-          if (forget) forget.onclick = () => {
-            const m = loadRememberMap(); delete m[sid]; saveRememberMap(m);
-            savedHint.textContent = "Removed saved key.";
-          };
-        }, 0);
+        savedHint.innerHTML = `Saved on this device — password optional.`;
       } else savedHint.textContent = "";
     }
 
-    // Word regex
+    // Word regex (letters, apostrophes, hyphens, optional trailing .,!?)
     const WORD_RX = /^[A-Za-z]+(?:['-][A-Za-z]+)*(?:[.,!?])?$/;
 
     // Utils
@@ -203,6 +230,14 @@
     function escapeHtml(s) { return (s || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
     function setDotColour(el, colour, present) { el.style.background = present ? (colour || "#666") : "#666"; el.style.boxShadow = "0 0 0 1px rgba(255,255,255,.12) inset"; }
     function setMyColourUI(hex){ if (!hex) return; colourSwatch.style.background = hex; youDot.style.background = hex; }
+    function presenceOf(ts) {
+      const now = Date.now();
+      const d = now - (ts || 0);
+      if (!ts) return {cls:"offline", label:"(offline)"};
+      if (d <= ONLINE_MS) return {cls:"online", label:"(online)"};
+      if (d <= AWAY_MS)   return {cls:"away", label:"(away)"};
+      return {cls:"offline", label:"(offline)"};
+    }
 
     // Crypto: SHA-256 → base64url
     async function sha256Base64Url(input) {
@@ -213,14 +248,18 @@
       return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
     }
 
-    // Render story
+    // Render story — merge local colour override before using players map
+    const localColour = { }; // uid -> hex (ensures instant colour persistence)
     function renderStory(words, players) {
       storyBox.innerHTML = "";
       if (!words.length) { storyBox.textContent = "(No words yet—be the first to write!)"; wordCount.textContent = "0"; return; }
       for (const w of words) {
-        const span = document.createElement("span"); span.className = "word";
-        span.style.color = players?.[w.by]?.colour || "#c6cdff";
-        span.textContent = w.w; storyBox.appendChild(span);
+        const span = document.createElement("span");
+        span.className = "word";
+        const colour = (players?.[w.by]?.colour) || localColour[w.by] || "#c6cdff";
+        span.style.color = colour;
+        span.textContent = w.w;
+        storyBox.appendChild(span);
       }
       wordCount.textContent = String(words.length);
     }
@@ -258,7 +297,7 @@
     // ---------- Enter session (mode: 'create' | 'join'); supports silent auto-resume ----------
     async function enterSession(mode, opts = {}) {
       const { auto = false } = opts;
-      if (!auto) canPlaySound = true; // auto-resume won't play turn pings until interaction
+      if (!auto) canPlaySound = true;
 
       errorBox.textContent = "";
       const name = (opts.myNameOverride ?? nameInput.value).trim();
@@ -292,22 +331,22 @@
         if (mode === 'create' && exists) { if (!auto) joinStatus.innerHTML = '<span class="warn">Session already exists. Use Join.</span>'; return; }
         if (mode === 'join' && !exists) { if (!auto) joinStatus.innerHTML = '<span class="warn">No session found. Use Create.</span>'; return; }
 
-        // Reuse seat if this clientId is already present
+        // Reuse seat by clientId
         let myUid = Object.keys(players).find(uid => players[uid]?.clientId === clientId) || ("u_" + Math.random().toString(36).slice(2, 10));
         let myName = name;
 
-        // Enforce max 2 seats unless reclaiming
+        // Seat cap
         const seatCount = Object.keys(players).length;
         if (seatCount >= 2 && !players[myUid]) { if (!auto) joinStatus.innerHTML = '<span class="err">Session is full (2/2)</span>'; return; }
 
-        // Create session on 'create'
+        // Create if needed
         if (!exists && mode === 'create') {
           await set(sesRef, { createdAt: serverTimestamp(), friendlyId: sid, words: [], currentTurnUid: myUid, players: {} });
         } else if (exists && !existing.friendlyId) {
           await update(sesRef, { friendlyId: existing.friendlyId || sid });
         }
 
-        // Same-name disambiguation (only if not reclaiming and we’re the second)
+        // Name disambiguation
         if (!players[myUid] && seatCount === 1) {
           const [otherUid] = Object.keys(players);
           if (players[otherUid]?.name?.trim().toLowerCase() === name.toLowerCase()) myName = `${name} (2)`;
@@ -316,23 +355,23 @@
         // Default colour
         const defaultColour = colourPicker.value || `#${Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,"0")}`;
 
-        // Write/overwrite my seat atomically with clientId
+        // Write seat (with presence + lastActive)
+        const nowTs = Date.now();
         const myPlayerRef = ref(db, `sessions/${derivedKey}/players/${myUid}`);
         await set(myPlayerRef, {
           uid: myUid,
           clientId,
           name: myName,
           colour: players[myUid]?.colour || defaultColour,
-          joinedAt: serverTimestamp()
+          joinedAt: serverTimestamp(),
+          lastActive: nowTs
         });
         onDisconnect(myPlayerRef).remove();
 
-        // Remember session if requested (manual join/create)
+        // Remember session locally
         if (!auto && rememberChk.checked) {
           const map = loadRememberMap(); map[sid] = derivedKey; saveRememberMap(map); setSavedHintText(sid);
         }
-
-        // Save “last session” for auto-resume
         saveLastSession({ sessionId: sid, derivedKey, myName });
 
         // Switch UI
@@ -341,28 +380,35 @@
         sessionLabel.textContent = sid;
         youLabel.textContent = myName;
         colourPicker.value = players[myUid]?.colour || defaultColour;
+        localColour[myUid] = colourPicker.value; // local override for instant persistence
         setMyColourUI(colourPicker.value);
 
-        // Subscribe to changes
-        if (window._unsub) window._unsub(); // cleanup any previous
+        // Subscribe
+        if (window._unsub) window._unsub();
         window._unsub = onValue(sesRef, (s) => {
           const val = s.val() || {};
           const players = val.players || {};
           const words = val.words || [];
           let cturn = val.currentTurnUid;
           const ids = Object.keys(players);
-
-          // Peer
           const peerId = ids.find(k => k !== myUid);
+
+          // Presence labels
+          const meP = presenceOf(players[myUid]?.lastActive);
+          const peP = presenceOf(players[peerId]?.lastActive);
+          youPresence.className = `presence ${meP.cls}`; youPresence.textContent = meP.label;
+          peerPresence.className = `presence ${peP.cls}`; peerPresence.textContent = peP.label;
+
+          // Names & dots
           peerLabel.textContent = peerId ? (players[peerId]?.name || "Partner") : "(none)";
+          // Merge local colour override so story doesn't flicker to white
+          const mergedPlayers = JSON.parse(JSON.stringify(players || {}));
+          if (localColour[myUid]) { mergedPlayers[myUid] = mergedPlayers[myUid] || {}; mergedPlayers[myUid].colour = localColour[myUid]; }
+          setDotColour(youDot, mergedPlayers[myUid]?.colour, !!mergedPlayers[myUid]);
+          setDotColour(peerDot, mergedPlayers[peerId]?.colour, !!mergedPlayers[peerId]);
 
-          // Dots use chosen colours
-          setDotColour(youDot, players[myUid]?.colour, !!players[myUid]);
-          setDotColour(peerDot, players[peerId]?.colour, !!players[peerId]);
-
-          // Status + story
           setUIConnected(ids.length > 0);
-          renderStory(words, players);
+          renderStory(words, mergedPlayers);
 
           // Fix turn if missing player
           if (cturn && !players[cturn] && ids.length > 0) {
@@ -384,7 +430,7 @@
             update(sesRef, { currentTurnUid: peerId });
           }
 
-          // Turn sound (only after an interaction; auto-resume won’t ping until you click)
+          // Turn sound
           const isMyTurn = (cturn === myUid) && (ids.length === 2);
           if (wasMyTurn === false && isMyTurn) playTurnSound();
           if (wasMyTurn === null) wasMyTurn = isMyTurn; else wasMyTurn = isMyTurn;
@@ -394,6 +440,18 @@
         });
 
         if (!auto) { wordInput.focus(); joinStatus.innerHTML = '<span class="ok">Ready!</span>'; }
+
+        // Presence heartbeat (every 10s + on interactions)
+        if (window._presenceTimer) clearInterval(window._presenceTimer);
+        window._presenceTimer = setInterval(async () => {
+          try { await update(ref(db, `sessions/${derivedKey}/players/${myUid}`), { lastActive: Date.now() }); } catch {}
+        }, 10000);
+
+        const bumpPresence = async () => {
+          try { await update(ref(db, `sessions/${derivedKey}/players/${myUid}`), { lastActive: Date.now() }); } catch {}
+        };
+        ["click","keydown","touchstart","visibilitychange"].forEach(ev => document.addEventListener(ev, bumpPresence, {passive:true}));
+
       } catch (e) {
         console.error(e);
         if (!auto) joinStatus.innerHTML = '<span class="err">Failed. Check console & Firebase config.</span>';
@@ -406,21 +464,20 @@
     createBtn.onclick = () => enterSession('create');
     joinBtn.onclick = () => enterSession('join');
 
-    // Colour picker change
+    // Colour picker change -> update swatch + Firebase (and local override for persistence)
     colourPicker.addEventListener("input", async () => {
       try {
-        const last = loadLastSession();
-        if (!last) return;
+        const last = loadLastSession(); if (!last) return;
         const { derivedKey } = last;
-        const myColour = colourPicker.value;
-        setMyColourUI(myColour);
-
-        // we need myUid to write colour — we don’t store it; so update our seat by clientId
+        // find my uid by clientId
         const sesRef = ref(db, `sessions/${derivedKey}`);
         const snap = await get(sesRef);
         const players = (snap.val() && snap.val().players) || {};
         const myUid = Object.keys(players).find(uid => players[uid]?.clientId === clientId);
-        if (myUid) await update(ref(db, `sessions/${derivedKey}/players/${myUid}`), { colour: myColour });
+        const hex = colourPicker.value;
+        localColour[myUid] = hex; // make it stick immediately
+        setMyColourUI(hex);
+        if (myUid) await update(ref(db, `sessions/${derivedKey}/players/${myUid}`), { colour: hex, lastActive: Date.now() });
       } catch (e) { console.error(e); }
     });
 
@@ -455,9 +512,10 @@
           words: [...words, { w: titleCaseFirstWordIfNeeded(words.length, word), by: myUid, t: Date.now() }],
           currentTurnUid: peerUid || myUid
         });
-
-        if (!peerUid) { submitBtn.disabled = true; wordInput.disabled = true; turnBanner.textContent = "Waiting for partner…"; }
         wordInput.value = "";
+        if (!peerUid) { submitBtn.disabled = true; wordInput.disabled = true; turnBanner.textContent = "Waiting for partner…"; }
+        // bump presence
+        await update(ref(db, `sessions/${derivedKey}/players/${myUid}`), { lastActive: Date.now() });
       } catch (e) { console.error(e); errorBox.textContent = "Failed to add word. Check your connection."; }
     };
 
@@ -480,7 +538,6 @@
         const last = loadLastSession();
         if (last) {
           const { derivedKey } = last;
-          // remove my seat if present
           const sesRef = ref(db, `sessions/${derivedKey}`);
           const snap = await get(sesRef);
           const players = (snap.val() && snap.val().players) || {};
@@ -488,8 +545,8 @@
           if (myUid) await remove(ref(db, `sessions/${derivedKey}/players/${myUid}`));
         }
       } catch {}
-      // clear auto-resume + go to login
-      saveLastSession(null);
+      // clear auto-resume + back to login
+      localStorage.removeItem(LAST_KEY);
       location.reload();
     };
 
@@ -499,19 +556,17 @@
     passwordInput.addEventListener("keydown", (e) => { if (e.key === "Enter") joinBtn.click(); });
 
     // Minor status tweak on tab hide/show
-    document.addEventListener("visibilitychange", () => { statusDot.textContent = document.hidden ? "Background" : "Connected"; });
+    document.addEventListener("visibilitychange", () => {
+      statusDot.textContent = document.hidden ? "Background" : "Connected";
+    });
 
-    // -------- Auto-resume on load --------
+    // Auto-resume on load
     (async function autoResume() {
       const last = loadLastSession();
-      if (!last) return; // no previous session
-      // Pre-fill UI (in case resume fails we show the form with values)
-      const saved = loadLocal();
+      if (!last) return;
       if (last.sessionId) sessionInput.value = last.sessionId;
       if (last.myName) { nameInput.value = last.myName; }
       setSavedHintText(last.sessionId || "");
-
-      // Try silent join of the last session
       await enterSession('join', {
         auto: true,
         sessionIdOverride: last.sessionId || "",
