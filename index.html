@@ -469,9 +469,9 @@ async function handleColourChange(){
         await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`),{ colour:hex, lastActive:Date.now() });
         localColourChosen = true;
         // Immediately enable input locally if it's my turn and I haven't written yet
-        const cturn = val.currentTurnUid;
+        const cturnLocal = val.currentTurnUid;
         const myWordsSoFar = words.reduce((n,w)=>n+((w&&w.by===myUid)?1:0),0);
-        if (cturn === myUid && myWordsSoFar === 0) {
+        if (cturnLocal === myUid && myWordsSoFar === 0) {
           submitBtn.disabled = false;
           wordInput.disabled = false;
           turnBanner.textContent = "It's your turn";
@@ -483,9 +483,9 @@ async function handleColourChange(){
         setMyColourUI(hex);
     
         // Immediately enable input locally if it's my turn and I haven't written yet
-        const cturn = val.currentTurnUid;
+        const cturnLocal = val.currentTurnUid;
         const myWordsSoFar = words.reduce((n,w)=>n+((w&&w.by===myUid)?1:0),0);
-        if (cturn === myUid && myWordsSoFar === 0) {
+        if (cturnLocal === myUid && myWordsSoFar === 0) {
           submitBtn.disabled = false;
           wordInput.disabled = false;
           turnBanner.textContent = "It's your turn";
