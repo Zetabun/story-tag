@@ -332,7 +332,7 @@
         }
 
         // --- Create/update player seat (DON'T overwrite colour if seat already exists) ---
-        const defaultColour = `#${Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,"0")}`;
+        // (colour is assigned on first submit only)
         const myPlayerRef=ref(db,`sessions/${derivedKey}/players/${myUid}`);
         const seatExists = !!players[myUid];
 
@@ -354,6 +354,7 @@
 
         // Set local/UI colour from server if present, else default
         const myColourNow = (players[myUid]?.colour) || defaultColour;
+        colourPicker.value = myColourNow;
         localColour[myUid] = myColourNow;
         setMyColourUI(myColourNow);
 
@@ -397,6 +398,7 @@
           if(wasMyTurn===false && isMyTurn) playTurnSound(); wasMyTurn=isMyTurn;
 
           saveLocal({sessionId:sid,myName});
+          ...(players[myUid]?.colour ? {} : { [`players/${myUid}/colour`]: myColourNow })
         });
 
         if(!auto){ wordInput.focus(); joinStatus.innerHTML='<span class="ok">Ready!</span>'; }
@@ -432,8 +434,11 @@
       if(ses.currentTurnUid!==myUid){ errorBox.textContent="Not your turn yet."; wordInput.value=""; return; }
       if(!WORD_RX.test(word)){ errorBox.textContent="Invalid word. Use letters, apostrophes, hyphens, optional .,!? at end."; return; }
 
-            // Colour: always use your assigned session colour
-      const myColourNow = players[myUid]?.colour || "#58a6ff";;
+      // Colour: require a choice before first submit; lock on first submit
+      const locked = players[myUid]?.colour || null;
+      const pending = colourPicker.value && colourPicker.value.trim() ? colourPicker.value : null;
+      if(!locked && !pending){ errorBox.textContent="Pick a colour first."; return; }
+      const myColourNow = locked || pending || "#58a6ff";
 
       const words=Array.isArray(ses.words)?ses.words:[]; const peerUid=Object.keys(players).find(k=>k!==myUid);
 
@@ -441,6 +446,7 @@
         await update(sesRef,{
           words:[...words,{ w:titleCaseFirstWordIfNeeded(words.length,word), by:myUid, c:myColourNow, t:Date.now() }],
           currentTurnUid: (peerUid || null),
+          ...(players[myUid]?.colour ? {} : { [`players/${myUid}/colour`]: myColourNow })
         });
         await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`),{lastActive:Date.now()});
 
