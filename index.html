@@ -12,70 +12,11 @@
 
     body { margin:0; background:#0f1220; color:#f5f7ff; display:flex; min-height:100vh; }
     .wrap { margin:auto; width:min(900px, 92vw); padding:24px; padding-bottom: calc(var(--footer-h) + env(safe-area-inset-bottom, 0px) + 12px); }
-    .card { background:#171a2b; border:1px solid #2a2f4a; border-radius:16px; padding:18px 18px 16px; gap:16px; display:flex; flex-direction:column; box-shadow:0 10px 30px rgba(0,0,0,.25); overflow:hidden; }
+    .card { background:#171a2b; border:1px solid #2a2f4a; border-radius:14px; padding:20px; box-shadow:0 10px 30px rgba(0,0,0,.25); overflow:hidden; }
 
-    .muted { color:#b9c0ff; opacity:.9; }
-    .strong { font-weight:600; color:#fff; }
-    .title { font-weight:800; font-size:clamp(24px, 3.4vw, 36px); letter-spacing:.3px; display:flex; align-items:center; gap:10px; }
-    .title .logo { width:28px; height:28px; border-radius:6px; background:linear-gradient(135deg, #7b88ff, #58a6ff); box-shadow:0 6px 18px rgba(88,166,255,.4); }
-    .subtle { color:#9aa3d7; }
-
-    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-    .pill { display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid #2a2f4a; background:#0f1328; border-radius:999px; }
-    .pill .dot { width:10px; height:10px; border-radius:50%; border:1px solid #2a2f4a; background:#58a6ff; }
-    .pill .presence { font-size:.85em; padding:2px 6px; border-radius:999px; border:1px solid #2a2f4a; background:#101534; }
-    .presence.online { color:#7af5b0; border-color:#2e5a4a; background:#0f1f1a; }
-    .presence.away { color:#ffd37a; border-color:#5a4f2e; background:#1f1a0f; }
-    .presence.offline { color:#b9c0ff; }
-
-    .divider { height:1px; width:100%; background:linear-gradient(90deg, transparent, #2a2f4a, transparent); margin:6px 0; }
-
-    .story { font-size: clamp(18px, 2.6vw, 22px); line-height:1.7; letter-spacing:.2px; min-height:120px; padding:6px 4px; border-radius:10px; background:#0f1328; border:1px solid #303659; }
-    .word { display:inline; } .word + .word::before { content:" "; }
-
-    .colourWrap { position:relative; display:inline-block; }
-    .swatch{ width:28px; height:14px; border-radius:7px; border:1px solid #2a2f4a; background:#58a6ff; display:inline-block; vertical-align:middle; }
-    .swatchInput{ position:absolute; inset:0; opacity:0; cursor:pointer; }
-
-    .spacer { height:6px; }
-    .row.space { gap:8px; }
-    .turn { color:#fff; font-weight:700; }
-    .nameTag { color:#e6ebff; font-weight:700; }
-    .subtleKey { color:#92a0ff; font-variant-numeric: tabular-nums; }
-
-    .footer { position:fixed; left:0; right:0; bottom:0; padding:6px 10px calc(env(safe-area-inset-bottom, 0px) + 6px); display:flex; align-items:center; gap:12px; justify-content:center; background:linear-gradient(180deg, rgba(15,18,32,0), rgba(15,18,32,.9)); backdrop-filter: blur(4px); }
-    .footer-chip { font-size:.8em; color:#9aa3d7; padding:6px 10px; background:#101534; border:1px solid #2a2f4a; border-radius:999px; white-space:nowrap; }
-
-    header { display:flex; align-items:center; justify-content:space-between; gap:10px; }
-    .build { display:flex; align-items:center; gap:10px; }
-    .badge { font-size:.7em; font-weight:700; letter-spacing:.3px; color:#9aa3d7; display:inline-flex; align-items:center; gap:8px; }
-    .badge .spark { width:8px; height:8px; border-radius:50%; background:radial-gradient(circle at 30% 30%, #7b88ff, #58a6ff); box-shadow:0 0 16px #58a6ff; }
-
-    .players { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-    .players .pill { gap:8px; }
-    .players .name { color:#fff; font-weight:700; }
-    .players .small { font-size:.9em; color:#9aa3d7; }
-
-    .controls { display:flex; gap:8px; flex-wrap:wrap; }
-    input[type="text"], input[type="password"]{
-      width:100%; max-width:100%; padding:12px 14px; border-radius:10px; border:1px solid #303659;
-      background:#0f1328; color:#fff; font-size:16px; display:block;
-    }
-    input::placeholder { color:#8890b3; } input[disabled]{ opacity:.6; }
-    button { padding:12px 16px; border-radius:10px; border:1px solid #2a2f4a; background:#28315e; color:#fff; cursor:pointer; transition:.15s transform ease; }
-    button:hover { transform: translateY(-1px); }
-    button:active { transform: translateY(0); }
-
-    .btnSecondary { background:#1a2040; }
-    .btnDanger { background:#4a2030; border-color:#5a2a3a; }
-    .btnQuiet { background:#111735; border-color:#2a2f4a; }
-
-    .error { color:#ff8a9a; }
-
-    .help { font-size:.85em; color:#9aa3d7; }
-    .kbd { display:inline-flex; align-items:center; justify-content:center; padding:1px 6px; border-radius:6px; border:1px solid #2a2f4a; background:#111735; font-weight:700; font-size:.85em; color:#c6cdff; }
-
-    .tag { font-size: .62em; font-weight: 500; color:#9aa3d7; letter-spacing:.4px;
+    h1 { margin:0 0 6px; font-size: clamp(24px, 4vw, 34px); letter-spacing:.3px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .version-label {
+      font-size: .62em; font-weight: 500; color:#9aa3d7; letter-spacing:.4px;
       background:#12162c; border:1px solid #2a2f4a; padding:4px 8px; border-radius:999px;
     }
     .version-badge { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; color:#b9c0ff; }
@@ -88,89 +29,139 @@
       background:#0f1328; color:#fff; font-size:16px; display:block;
     }
     input::placeholder { color:#8890b3; } input[disabled]{ opacity:.6; }
-    button { padding:12px 16px; border-radius:10px; border:1px solid #2a2f4a; background:#28315e; color:#fff; cursor:pointer; transition:.15s transform ease; }
-    button:hover { transform: translateY(-1px); }
-    button:active { transform: translateY(0); }
+    button { padding:12px 16px; border-radius:10px; border:1px solid #39406a; background:#2a2f4a; color:#fff; cursor:pointer; transition:.15s transform ease; }
+    button:hover { transform: translateY(-1px); } button:disabled { opacity:.55; cursor:not-allowed; transform:none; }
 
-    .row.center { align-items:center; }
-    .tip { color:#9aa3d7; font-size:.9em; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .hint { font-size:13px; color:#9aa3d7; }
+    .ok { color:#69f0ae; } .err { color:#ff6b6b; } .warn { color:#ffd166; }
+
+    .story { background:#0c0f22; border:1px solid #2a2f4a; border-radius:12px; padding:14px; min-height:100px; line-height:1.6; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; }
+    .pill { padding:6px 10px; border-radius:999px; background:#1c2142; border:1px solid #2a2f4a; color:#c6cdff; font-size:12px; display:flex; align-items:center; gap:8px; }
+    .muted { color:#9aa3d7; font-size:14px; } .spacer{height:10px;} .turn{font-weight:600;} .nameTag{font-weight:700;} .small{font-size:12px;color:#9aa3d7;}
+    .divider { height:1px; background:#2a2f4a; margin:14px 0; }
+    .tag { display:inline-flex; align-items:center; gap:6px; }
+    .dot { width:10px; height:10px; border-radius:50%; background:#666; box-shadow:0 0 0 1px rgba(255,255,255,.12) inset; }
+
+    .word { display:inline; } .word + .word::before { content:" "; }
+
+    .colourWrap { position:relative; display:inline-block; }
+    .swatch{ width:28px; height:14px; border-radius:7px; border:1px solid #2a2f4a; background:#58a6ff; display:inline-block; vertical-align:middle; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+    .swatchInput{ position:absolute; inset:0; opacity:0; cursor:pointer; }
+
+    .presence{ font-weight:600; } .online{ color:#69f0ae; } .away{ color:#ffd166; } .offline{ color:#b0b7e1; }
+
+    /* Footer chip (desktop only) */
+    .footer-chip{
+      position:fixed; bottom:calc(8px + env(safe-area-inset-bottom, 0px)); left:50%; transform:translateX(-50%);
+      font-size:12px; color:#9aa3d7; background:rgba(23,26,43,0.92); border:1px solid #2a2f4a; border-radius:10px;
+      padding:6px 10px; z-index:30; -webkit-backdrop-filter:saturate(130%) blur(6px); backdrop-filter:saturate(130%) blur(6px);
+    }
+    @media (max-width: 768px) { .footer-chip { display:none !important; } }
+
+    /* Mobile tweaks */
+    @media (max-width: 768px) {
+      .row { gap:8px; }
+      .pill { font-size:11px; padding:6px 8px; }
+      .story { min-height:120px; font-size:16px; }
+      #wordInput, #submitBtn { flex:1 1 100%; }
+      .toolbar button { flex:1 1 calc(50% - 8px); }
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <header>
-      <div class="title"><span class="logo"></span>Story Tag</div>
-      <div class="build">
-        <div class="badge"><span class="spark"></span><span>Build</span></div>
-        <div id="buildVersion" class="version-badge">v0.0.0</div>
-      </div>
-    </header>
+    <div class="card">
+      <h1>
+        Story Tag
+        <span class="version-label">Alpha <span id="buildVersion" class="version-badge">v0.0.0</span></span>
+      </h1>
+      <p class="sub">Create a private session with an ID + password, then share both with a friend. Take turns adding one word to build a story.</p>
 
-    <div class="spacer"></div>
-
-    <div id="auth" class="card" role="region" aria-label="Session">
-      <p class="sub">Start a new session or join an existing one.</p>
-      <div class="grid">
-        <label>Your Name
-          <input id="name" type="text" placeholder="e.g., Alex" />
-        </label>
+      <!-- Login -->
+      <div id="auth" class="grid">
+        <div>
+          <label for="name">Your name</label>
+          <input id="name" type="text" maxlength="24" placeholder="e.g., Alex" />
+        </div>
+        <div>
+          <label for="sessionId">Session ID</label>
+          <input id="sessionId" type="text" maxlength="32" placeholder="e.g., 343w4 (friendly name)" />
+          <div class="small hint">This is a friendly label. Privacy comes from the password-derived key.</div>
+        </div>
+        <div>
+          <label for="password">Password</label>
+          <input id="password" type="password" maxlength="64" placeholder="Required once unless remembered" />
+          <div class="small hint" id="savedHint"></div>
+        </div>
         <div class="row">
-          <button id="createBtn">Create Session</button>
-          <button id="joinBtn" class="btnSecondary">Join Session</button>
-          <span id="joinStatus" class="help"></span>
+          <label class="small"><input id="rememberChk" type="checkbox" /> Remember this session on this device</label>
         </div>
-        <label id="sessionLabel">Session ID
-          <input id="sessionId" type="text" placeholder="e.g., ABC123" />
-        </label>
-        <label>Password
-          <input id="password" type="password" placeholder="Optional, but recommended" />
-        </label>
-        <label><input id="rememberChk" type="checkbox" /> Remember this device for this session</label>
-        <div class="help" id="savedHint"></div>
-      </div>
-    </div>
-
-    <div id="game" class="card" role="region" aria-label="Game" hidden>
-      <div class="row players">
-        <div class="pill"><span id="youDot" class="dot"></span><span id="youLabel" class="name">You</span><span id="youPresence" class="presence offline">(offline)</span></div>
-        <div class="pill"><span id="peerDot" class="dot"></span><span id="peerLabel" class="name">Partner</span><span id="peerPresence" class="presence offline">(offline)</span></div>
-      </div>
-
-      <div class="row">
-        <div class="pill">Words: <span id="wordCount">0</span></div>
-        <div class="pill">Status: <span id="statusDot">Waiting…</span></div>
-        <div class="pill">
-          Colour:
-          <span class="colourWrap">
-            <span id="colourSwatch" class="swatch" title="Pick your colour"></span>
-            <input id="colourPicker" type="color" class="swatchInput" value="#58a6ff" />
-          </span>
+        <div class="row">
+          <button id="createBtn">Create session</button>
+          <button id="joinBtn">Join session</button>
+          <div id="joinStatus" class="small"></div>
         </div>
       </div>
 
-      <div class="divider"></div>
+      <!-- Game -->
+      <div id="game" style="display:none">
+        <div class="row">
+          <div class="pill">Session: <span id="sessionLabel"></span></div>
+          <div class="pill">You:
+            <span class="tag">
+              <span id="youDot" class="dot"></span>
+              <span id="youLabel" class="nameTag"></span>
+              <span id="youPresence" class="presence offline">(offline)</span>
+            </span>
+          </div>
+          <div class="pill">Partner:
+            <span class="tag">
+              <span id="peerDot" class="dot"></span>
+              <span id="peerLabel"></span>
+              <span id="peerPresence" class="presence offline">(offline)</span>
+            </span>
+          </div>
+          <div class="pill">Words: <span id="wordCount">0</span></div>
+          <div class="pill">Status: <span id="statusDot">Waiting…</span></div>
+          <div class="pill">
+            Colour:
+            <span class="colourWrap">
+              <span id="colourSwatch" class="swatch" title="Pick your colour"></span>
+              <input id="colourPicker" type="color" class="swatchInput" value="#58a6ff" />
+            </span>
+          </div>
+        </div>
 
-      <div class="story" id="storyBox" aria-live="polite">(No words yet—be the first to write!)</div>
-      <div class="spacer"></div>
+        <div class="divider"></div>
 
-      <div id="turnBanner" class="muted">Waiting for partner…</div>
-      <div class="spacer"></div>
+        <div class="story" id="storyBox" aria-live="polite">(No words yet—be the first to write!)</div>
+        <div class="spacer"></div>
 
-      <div class="row space">
-        <input id="wordInput" type="text" placeholder="Type a single word…" />
-        <button id="submitBtn" disabled>Submit</button>
-        <button id="copyBtn" class="btnQuiet">Copy Text</button>
-        <button id="downloadBtn" class="btnQuiet">Download</button>
-        <button id="leaveBtn" class="btnDanger">Leave</button>
+        <div id="turnBanner" class="muted">Waiting for partner…</div>
+        <div class="spacer"></div>
+
+        <div class="row">
+          <input id="wordInput" type="text" placeholder="Your word…" autocomplete="off" />
+          <button id="submitBtn">Add Word</button>
+        </div>
+        <div class="hint">Rules: one word per turn. Letters, apostrophes, hyphens, and optional punctuation at the end (. , ! ?) allowed.</div>
+
+        <div class="divider"></div>
+
+        <div class="toolbar">
+          <button id="copyBtn">Copy story</button>
+          <button id="downloadBtn">Download .txt</button>
+          <button id="leaveBtn">Leave session</button>
+        </div>
+        <div id="errorBox" class="small err"></div>
       </div>
-
-      <div id="errorBox" class="error"></div>
     </div>
   </div>
 
-  <div class="footer">
-    <div class="footer-chip">Built for fun — share your Session ID + Password with a friend and take turns!</div>
-  </div>
+  <!-- Footer (hidden on mobile) -->
+  <div class="footer-chip">Built for fun — share your Session ID + Password with a friend and take turns!</div>
 
   <!-- App -->
   <script type="module">
@@ -227,9 +218,7 @@
 
     /* ========= Stable client id ========= */
     const CID_KEY = "storytag_client_id";
-    function getClientId(){ let cid=localStorage.getItem(CID_KEY)||""; if(!cid){ const bytes=crypto.getRandomValues(new Uint8Array(16)); let bin=""; for(let b of bytes) bin+=String.fromCharCode(b);
-      return btoa(bin).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"");
-    } localStorage.setItem(CID_KEY,cid); return cid; }
+    function getClientId(){ let cid=localStorage.getItem(CID_KEY); if(!cid){ cid="c_"+Math.random().toString(36).slice(2,12); localStorage.setItem(CID_KEY,cid);} return cid; }
     const clientId = getClientId();
 
     /* ========= Local storage ========= */
@@ -249,10 +238,17 @@
     /* ========= Helpers ========= */
     const WORD_RX=/^[A-Za-z]+(?:['-][A-Za-z]+)*(?:[.,!?])?$/;
     const titleCaseFirstWordIfNeeded=(i,w)=>(i===0&&w.length)?w[0].toUpperCase()+w.slice(1):w;
-    const escapeHtml = s => String(s||"").replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]));
-    const presenceOf = (ts)=>{ const now=Date.now(); if(!ts) return {cls:"offline",label:"(offline)"}; const age=now-ts; if(age<ONLINE_MS) return {cls:"online",label:"online"}; if(age<AWAY_MS) return {cls:"away",label:"away"}; return {cls:"offline",label:"(offline)"}; };
-    function setDotColour(el, hex, hasPlayer){ el.style.background = hasPlayer ? (hex||"#58a6ff") : "transparent"; el.style.borderColor = hasPlayer ? "#2a2f4a" : "#2a2f4a"; }
-    function setMyColourUI(hex){ colourSwatch.style.background=hex||"#58a6ff"; }
+    const setUIConnected=b=>statusDot.textContent=b?"Connected":"Offline";
+    const escapeHtml=s=>(s||"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+    const setDotColour=(el,c,p)=>{ el.style.background=p?(c||"#666"):"#666"; el.style.boxShadow="0 0 0 1px rgba(255,255,255,.12) inset"; };
+    const setMyColourUI=hex=>{ if(hex){ colourSwatch.style.background=hex; youDot.style.background=hex; } };
+    const presenceOf=ts=>{ const d=Date.now()-(ts||0); return !ts?{cls:"offline",label:"(offline)"}:d<=ONLINE_MS?{cls:"online",label:"(online)"}:d<=AWAY_MS?{cls:"away",label:"(away)"}:{cls:"offline",label:"(offline)"}; };
+
+    async function sha256Base64Url(input){
+      const enc=new TextEncoder(); const hash=await crypto.subtle.digest("SHA-256",enc.encode(input));
+      const bytes=new Uint8Array(hash); let bin=""; for(let b of bytes) bin+=String.fromCharCode(b);
+      return btoa(bin).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"");
+    }
 
     /* ========= Colour persistence ========= */
     const localColour={}; // uid -> hex
@@ -283,86 +279,87 @@
     function playTurnSound(){
       if(!canPlaySound) return;
       try{ ensureAudio(); const now=audioCtx.currentTime;
-        const g=audioCtx.createGain(); g.gain.setValueAtTime(0.001,now); g.gain.exponentialRampToValueAtTime(0.07,now+0.02); g.gain.exponentialRampToValueAtTime(0.0001,now+0.35); g.connect(audioCtx.destination);
+        const g=audioCtx.createGain(); g.gain.setValueAtTime(0.0001,now); g.gain.exponentialRampToValueAtTime(0.12,now+0.01); g.gain.exponentialRampToValueAtTime(0.0001,now+0.35); g.connect(audioCtx.destination);
         const o=audioCtx.createOscillator(); o.type="sine"; o.frequency.setValueAtTime(660,now); o.frequency.linearRampToValueAtTime(880,now+0.2); o.connect(g); o.start(now); o.stop(now+0.35);
       }catch{}
     }
 
-    function setUIConnected(connected){
-      statusDot.textContent = connected ? "Connected" : "Waiting…";
-      statusDot.style.color = connected ? "#7af5b0" : "#b9c0ff";
-    }
+    // Prefill
+    (function(){ const s=loadLocal(); if(s.sessionId&&s.myName){ nameInput.value=s.myName; sessionInput.value=s.sessionId; setSavedHintText(s.sessionId);} })();
+    sessionInput.addEventListener("input",()=>setSavedHintText(sessionInput.value.trim()));
 
-    /* ========= Session flow ========= */
-    async function enterSession(kind, opts={}){
-      const isCreate = kind==='create';
-      const myName = (opts.nameOverride ?? nameInput.value ?? "").trim() || "You";
-      const rawSessionId = (opts.sessionIdOverride ?? sessionInput.value ?? "").trim();
-      const sessionId = rawSessionId.replace(/\s+/g,"").toUpperCase();
-      const password = opts.passwordOverride ?? passwordInput.value ?? "";
-      const remember = !!(opts.rememberOverride ?? rememberChk.checked);
-      const last = loadLastSession();
-
-      if(!isCreate && !sessionId){ joinStatus.innerHTML='<span class="err">Enter a Session ID</span>'; return; }
-      createBtn.disabled=true; joinBtn.disabled=true; joinStatus.textContent="Connecting…";
+    // Join/create with reclaim + stale eviction and NO colour overwrite if seat exists
+    async function enterSession(mode, opts={}){
+      const {auto=false}=opts; if(!auto) canPlaySound=true;
+      joinStatus.textContent=""; const name=(opts.myNameOverride??nameInput.value).trim();
+      const sid=(opts.sessionIdOverride??sessionInput.value).trim(); const pwd=opts.passwordOverride ?? passwordInput.value;
+      if(!name){ if(!auto) joinStatus.innerHTML='<span class="err">Enter your name</span>'; return; }
+      if(!sid){ if(!auto) joinStatus.innerHTML='<span class="err">Enter a session ID</span>'; return; }
+      if(!auto){ joinBtn.disabled=true; createBtn.disabled=true; joinStatus.textContent=mode==='create'?'Creating…':'Joining…'; }
 
       try{
-        // Derive key
-        const enc = new TextEncoder();
-        const data = enc.encode(`${sessionId}:${password||""}`);
-        const hash = await crypto.subtle.digest("SHA-256", data);
-        const hex = Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,"0")).join("");
-        const derivedKey = hex.slice(0,24);
-
-        const sesRef = ref(db, `sessions/${derivedKey}`);
-        const snap = await get(sesRef);
-        const exists = snap.exists();
-        let myUid = last?.myUid || null;
-
-        if(isCreate){
-          if(exists){ joinStatus.innerHTML='<span class="err">That Session already exists. Pick another ID or join it.</span>'; return; }
-          const newUid = crypto.randomUUID().replace(/-/g,"").slice(0,10);
-          myUid = newUid;
-          await set(sesRef,{
-            createdAt: serverTimestamp(),
-            currentTurnUid: newUid,
-            players: {
-              [newUid]: { name: myName, clientId, colour: localColour[newUid] || colourPicker.value || "#58a6ff", lastActive: Date.now() }
-            },
-            words: []
-          });
-        }else{
-          // Join flow
-          if(!exists){ joinStatus.innerHTML='<span class="err">Session not found.</span>'; return; }
-          const val = snap.val() || {};
-          const players = val.players || {};
-          const foundUid = Object.keys(players).find(u => players[u]?.clientId === clientId);
-          myUid = foundUid || crypto.randomUUID().replace(/-/g,"").slice(0,10);
-
-          await update(sesRef, {
-            players: {
-              ...players,
-              [myUid]: {
-                ...(players[myUid]||{}),
-                name: myName,
-                clientId,
-                colour: (players[myUid]?.colour) || localColour[myUid] || colourPicker.value || "#58a6ff",
-                lastActive: Date.now()
-              }
-            }
-          });
+        const remembered=loadRememberMap(); let derivedKey=opts.derivedKeyOverride||null;
+        if(!derivedKey){
+          if(mode==='join'&&!pwd&&remembered[sid]) derivedKey=remembered[sid];
+          else { if(!pwd){ if(!auto) joinStatus.innerHTML='<span class="err">Enter a password</span>'; return; }
+                 derivedKey=await sha256Base64Url(`${sid}:${pwd}`); }
         }
 
-        // Save remember state
-        if(remember){ const map=loadRememberMap(); map[sessionId]=true; saveRememberMap(map); }
-        saveLastSession({ sessionId, derivedKey, myUid, myName });
+        const sesRef=ref(db,`sessions/${derivedKey}`); const snap=await get(sesRef);
+        const exists=snap.exists(); const existing=snap.val()||{}; const players=existing.players||{};
+        if(mode==='create'&&exists){ if(!auto) joinStatus.innerHTML='<span class="warn">Session already exists. Use Join.</span>'; return; }
+        if(mode==='join'&&!exists){ if(!auto) joinStatus.innerHTML='<span class="warn">No session found. Use Create.</span>'; return; }
 
-        // Swap UI
-        auth.hidden=true; game.hidden=false; youLabel.textContent=myName; sessionLabel.innerHTML=`Session ID <span class="tag">${sessionId}</span>`;
-        setSavedHintText(sessionId);
-        wordInput.value=""; errorBox.textContent=""; canPlaySound=true;
+        // Reclaim or new uid
+        let myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId) || ("u_"+Math.random().toString(36).slice(2,10));
+        let myName=name;
 
-        // Live subscription to session
+        // If full and not mine, evict stale (>60s)
+        const seatCount=Object.keys(players).length;
+        if(seatCount>=2 && !players[myUid]){
+          const now=Date.now(); const staleUid=Object.keys(players).find(u=>(now-(players[u]?.lastActive||0))>STALE_MS);
+          if(staleUid) await remove(ref(db,`sessions/${derivedKey}/players/${staleUid}`));
+          else { if(!auto) joinStatus.innerHTML='<span class="err">Session is full (2/2)</span>'; return; }
+        }
+
+        // Create session if needed
+        if(!exists&&mode==='create'){ await set(sesRef,{createdAt:serverTimestamp(),friendlyId:sid,words:[],currentTurnUid:myUid,players:{}}); }
+        else if(exists&&!existing.friendlyId){ await update(sesRef,{friendlyId:existing.friendlyId||sid}); }
+
+        // Disambiguate names
+        if(!players[myUid] && Object.keys(players).length===1){
+          const [other]=Object.keys(players);
+          if(players[other]?.name?.trim().toLowerCase()===name.toLowerCase()) myName=`${name} (2)`;
+        }
+
+        // --- Create/update player seat (DON'T overwrite colour if seat already exists) ---
+        const defaultColour= colourPicker.value || `#${Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,"0")}`;
+        const myPlayerRef=ref(db,`sessions/${derivedKey}/players/${myUid}`);
+        const seatExists = !!players[myUid];
+
+        if (seatExists) {
+          await update(myPlayerRef, { uid:myUid, clientId, name:myName, lastActive:Date.now() });
+        } else {
+          await set(myPlayerRef, { uid:myUid, clientId, name:myName, colour:defaultColour, joinedAt:serverTimestamp(), lastActive:Date.now() });
+        }
+        onDisconnect(myPlayerRef).remove();
+        window.addEventListener("unload",()=>{ try{ navigator.sendBeacon && remove(myPlayerRef); }catch{} });
+
+        // Local remember
+        if(!auto&&rememberChk.checked){ const map=loadRememberMap(); map[sid]=derivedKey; saveRememberMap(map); setSavedHintText(sid); }
+        saveLastSession({sessionId:sid,derivedKey,myName});
+
+        // UI switch
+        auth.style.display="none"; game.style.display="block";
+        sessionLabel.textContent=sid; youLabel.textContent=myName;
+
+        // Set local/UI colour from server if present, else default
+        const myColourNow = (players[myUid]?.colour) || defaultColour;
+        colourPicker.value = myColourNow;
+        localColour[myUid] = myColourNow;
+        setMyColourUI(myColourNow);
+
+        // Subscribe to session
         if(window._unsub) window._unsub();
         window._unsub=onValue(sesRef,s=>{
           const val=s.val()||{}; const players=val.players||{}; const words=val.words||[]; let cturn=val.currentTurnUid;
@@ -370,34 +367,35 @@
 
           const meP=presenceOf(players[myUid]?.lastActive); const peP=presenceOf(players[peerId]?.lastActive);
           youPresence.className=`presence ${meP.cls}`; youPresence.textContent=meP.label;
-          peerPresence.className=`presence ${peP.cls}`; peerPresence.textContent=peP.label;
-
-          // Merge local colour to avoid flicker (prefer server colour)
+          peerPresence.className=`presence ${peP.cls}`; peerPresence.textContent=peP.label;\
+          // Merge colour: prefer server; only fall back to local if server missing
           const mergedPlayers=JSON.parse(JSON.stringify(players||{}));
           const serverColour = players?.[myUid]?.colour || null;
           if (serverColour) {
-            // Keep server as source of truth and sync local cache
+            // Keep server truth and sync local cache to it
             localColour[myUid] = serverColour;
           } else if (localColour[myUid]) {
-            // Only use local cache if server has nothing yet
+            // Use local only when server has nothing yet (e.g., just joined)
             mergedPlayers[myUid] = mergedPlayers[myUid] || {};
             mergedPlayers[myUid].colour = localColour[myUid];
           }
           peerLabel.textContent=peerId?(players[peerId]?.name||"Partner"):"(none)";
 
-          // Sync picker & dots using effective colour
-          const myEffectiveColour = (players?.[myUid]?.colour) || localColour[myUid] || colourPicker.value || "#c6cdff";
+          // Sync picker & dots to server colour
+          const myEffectiveColour = (players?.[myUid]?.colour) || localColour[myUid] || colourPicker.value || "#58a6ff";
           if (myEffectiveColour && colourPicker.value.toLowerCase() !== myEffectiveColour.toLowerCase()) {
             colourPicker.value = myEffectiveColour;
           }
           setMyColourUI(myEffectiveColour);
           setDotColour(youDot, myEffectiveColour, !!mergedPlayers[myUid]);
+
           setDotColour(peerDot, mergedPlayers[peerId]?.colour, !!mergedPlayers[peerId]);
+
 
           setUIConnected(ids.length>0);
           renderStory(words,mergedPlayers);
 
-          if(cturn && !players[cturn] && ids.length>0){ const nextIds=ids.filter(id=>players[id]); const newTurn=nextIds[0]; update(sesRef,{currentTurnUid:newTurn}); cturn=newTurn; }
+          if(cturn && !players[cturn] && ids.length>0){ const newTurn=ids[0]; update(sesRef,{currentTurnUid:newTurn}); cturn=newTurn; }
           if(ids.length<2 && words.length>0){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
           else setTurnBanner(cturn,players,myUid);
 
@@ -405,10 +403,10 @@
           if(ids.length===2 && last && last.by===myUid && cturn===myUid && peerId){ update(sesRef,{currentTurnUid:peerId}); }
           if(wasMyTurn===false && isMyTurn) playTurnSound(); wasMyTurn=isMyTurn;
 
-          saveLocal({sessionId:sessionId,myName});
+          saveLocal({sessionId:sid,myName});
         });
 
-        if(!opts.auto){ wordInput.focus(); joinStatus.innerHTML='<span class="ok">Ready!</span>'; }
+        if(!auto){ wordInput.focus(); joinStatus.innerHTML='<span class="ok">Ready!</span>'; }
 
         // Presence heartbeat + on interaction
         if(window._presenceTimer) clearInterval(window._presenceTimer);
@@ -418,36 +416,16 @@
 
       }catch(e){
         console.error(e);
-        if(!opts.auto) joinStatus.innerHTML='<span class="err">Failed. Check console & Firebase config.</span>';
+        if(!auto) joinStatus.innerHTML='<span class="err">Failed. Check console & Firebase config.</span>';
       }finally{
-        if(!opts.auto){ joinBtn.disabled=false; createBtn.disabled=false; }
+        if(!auto){ joinBtn.disabled=false; createBtn.disabled=false; }
       }
     }
 
     createBtn.onclick=()=>enterSession('create');
     joinBtn.onclick=()=>enterSession('join');
 
-    /* ========= Clipboard & Download ========= */
-    copyBtn.onclick=async ()=>{
-      try{
-        const text=[...storyBox.querySelectorAll(".word")].map(w=>w.textContent).join(" ").trim();
-        await navigator.clipboard.writeText(text);
-        copyBtn.textContent="Copied!"; setTimeout(()=>copyBtn.textContent="Copy Text",900);
-      }catch{ copyBtn.textContent="Copy failed"; setTimeout(()=>copyBtn.textContent="Copy Text",1200); }
-    };
-
-    downloadBtn.onclick=()=>{
-      const text=[...storyBox.querySelectorAll(".word")].map(w=>w.textContent).join(" ").trim()+"\n";
-      const blob=new Blob([text],{type:"text/plain"}); const url=URL.createObjectURL(blob);
-      const a=document.createElement("a"); a.href=url; a.download="story.txt"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    };
-
-    leaveBtn.onclick=()=>{
-      const last=loadLastSession(); if(!last) return location.reload();
-      saveLastSession(null); location.reload();
-    };
-
-    /* ========= Colour picker handlers ========= */
+    /* ========= Colour change: update UI instantly, then DB ========= */
     async function handleColourChange(){
       try{
         const last=loadLastSession(); if(!last) return;
@@ -468,36 +446,49 @@
     /* ========= Submit word ========= */
     submitBtn.onclick=async ()=>{
       errorBox.textContent="";
-      const w = wordInput.value.trim();
-      if(!WORD_RX.test(w)){ errorBox.textContent="Enter a single word (letters, optional - or ’, and punctuation like . , ! ?)"; return; }
+      let word=(wordInput.value||"").trim(); if(!word) return;
+
+      const last=loadLastSession(); if(!last){ errorBox.textContent="No active session."; return; }
+      const sesRef=ref(db,`sessions/${last.derivedKey}`); const sesSnap=await get(sesRef); const ses=sesSnap.val();
+      if(!ses){ errorBox.textContent="Session not found."; return; }
+
+      const players=ses.players||{}; const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId);
+      if(!myUid){ errorBox.textContent="Rejoin required."; return; }
+      if(ses.currentTurnUid!==myUid){ errorBox.textContent="Not your turn yet."; wordInput.value=""; return; }
+      if(!WORD_RX.test(word)){ errorBox.textContent="Invalid word. Use letters, apostrophes, hyphens, optional .,!? at end."; return; }
+
+      const words=Array.isArray(ses.words)?ses.words:[]; const peerUid=Object.keys(players).find(k=>k!==myUid);
+      const myColourNow=(players[myUid]?.colour)||localColour[myUid]||colourPicker.value||"#c6cdff";
 
       try{
-        const last=loadLastSession(); if(!last) return;
-        const sesRef=ref(db,`sessions/${last.derivedKey}`); const snap=await get(sesRef); const val=snap.val()||{};
-        const players=val.players||{}; const words=val.words||[]; const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId);
-        const peerUid=Object.keys(players).find(k=>k!==myUid);
-        const myColourNow=(players[myUid]?.colour)||localColour[myUid]||colourPicker.value||"#c6cdff";
-
         await update(sesRef,{
-          words:[...words,{ w:titleCaseFirstWordIfNeeded(words.length,w), by:myUid, c:myColourNow, t:Date.now() }],
+          words:[...words,{ w:titleCaseFirstWordIfNeeded(words.length,word), by:myUid, c:myColourNow, t:Date.now() }],
           currentTurnUid: peerUid || myUid
         });
-
-        wordInput.value=""; wordInput.focus();
-      }catch(e){ console.error(e); errorBox.textContent="Submit failed — try again."; }
+        wordInput.value="";
+        if(!peerUid){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
+        await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`),{lastActive:Date.now()});
+      }catch(e){ console.error(e); errorBox.textContent="Failed to add word. Check your connection."; }
     };
 
-    // Enter key to submit
-    wordInput.addEventListener("keydown",e=>{ if(e.key==="Enter") submitBtn.click(); });
+    /* ========= Utilities ========= */
+    copyBtn.onclick=async()=>{ const txt=[...document.querySelectorAll("#storyBox .word")].map(el=>el.textContent).join(" "); await navigator.clipboard.writeText(txt); copyBtn.textContent="Copied!"; setTimeout(()=>copyBtn.textContent="Copy story",1200); };
+    downloadBtn.onclick=()=>{ const last=loadLastSession(); const fileSid=last?.sessionId||"session"; const txt=[...document.querySelectorAll("#storyBox .word")].map(el=>el.textContent).join(" "); const blob=new Blob([txt],{type:"text/plain"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`story-${fileSid}.txt`; a.click(); URL.revokeObjectURL(a.href); };
+    leaveBtn.onclick=async()=>{ try{ const last=loadLastSession(); if(last){ const sesRef=ref(db,`sessions/${last.derivedKey}`); const snap=await get(sesRef); const players=(snap.val()&&snap.val().players)||{}; const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId); if(myUid) await remove(ref(db,`sessions/${last.derivedKey}/players/${myUid}`)); } }catch{} localStorage.removeItem(LAST_KEY); location.reload(); };
 
-    /* ========= Auto-rejoin last session ========= */
-    (async ()=>{
-      const last=loadLastSession();
-      if(!last) return;
-      nameInput.value=last.myName||"";
-      sessionInput.value=last.sessionId||"";
+    wordInput.addEventListener("keydown",e=>{ if(e.key==="Enter") submitBtn.click(); });
+    sessionInput.addEventListener("keydown",e=>{ if(e.key==="Enter") joinBtn.click(); });
+    passwordInput.addEventListener("keydown",e=>{ if(e.key==="Enter") joinBtn.click(); });
+
+    document.addEventListener("visibilitychange",()=>{ statusDot.textContent=document.hidden?"Background":"Connected"; });
+
+    // Auto-resume
+    (async function(){
+      const last=loadLastSession(); if(!last) return;
+      if(last.sessionId) sessionInput.value=last.sessionId;
+      if(last.myName) nameInput.value=last.myName;
       setSavedHintText(last.sessionId||"");
-      await enterSession('join',{ auto:true, sessionIdOverride:last.sessionId||"", nameOverride:last.myName||"", derivedKeyOverride:last.derivedKey||null });
+      await enterSession('join',{ auto:true, sessionIdOverride:last.sessionId||"", myNameOverride:last.myName||"", derivedKeyOverride:last.derivedKey||null });
     })();
   </script>
 
