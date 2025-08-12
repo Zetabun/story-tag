@@ -73,6 +73,8 @@
 
     .colourWrap.locked .swatch { opacity:.55; filter:grayscale(0.25); cursor:not-allowed; box-shadow:none; }
     .colourWrap.locked .swatchInput { pointer-events:none; }
+
+    .colourWrap.chosen .swatch { opacity:.8; }
 </style>
 </head>
 <body>
@@ -271,6 +273,11 @@
         wrap.classList.toggle('locked', !!locked);
         colourSwatch.classList.toggle('is-locked', !!locked);
         colourSwatch.title = locked ? "Colour locked for this session" : "Pick your colour";
+      }catch{}
+    }
+    function setColourChosen(chosen){
+      try{
+        colourSwatch.parentElement.classList.toggle('chosen', !!chosen);
       }catch{}
     }
 /* ========= Helpers ========= */
@@ -506,6 +513,7 @@
           // Enforce colour rules: must pick before first word; lock after first word
           const myWordsSoFar = myWordCount(words, myUid);
           const colourChosen = !!(players?.[myUid]?.colour);
+          setColourChosen(colourChosen);
           const locked = (myWordsSoFar > 0) || !!(players?.[myUid]?.colourLocked);
           setColourLocked(locked);
 
@@ -557,7 +565,7 @@ saveLocal({sessionId:sid,myName});saveLocal({sessionId:sid,myName});
         const hex=colourPicker.value;
 
         // Instant UI
-        localColour[myUid]=hex; saveSessionColour(last.derivedKey, clientId, hex); setMyColourUI(hex); setDotColour(youDot,hex,true);
+        localColour[myUid]=hex; saveSessionColour(last.derivedKey, clientId, hex); setMyColourUI(hex); setDotColour(youDot,hex,true); setColourChosen(true);
 
         // Persist
         if(myUid) await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`),{ colour:hex, lastActive:Date.now() });
