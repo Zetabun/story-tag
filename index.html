@@ -304,7 +304,7 @@
       storyBox.innerHTML=""; if(!words.length){ storyBox.textContent="(No words yet—be the first to write!)"; wordCount.textContent="0"; return; }
       for(const w of words){
         const el=document.createElement("span"); el.className="word";
-        const col=(players?.[w.by]?.colour) || w.c || localColour[w.by] || "#c6cdff";
+        const col=w.c || (players?.[w.by]?.colour) || localColour[w.by] || "#c6cdff";
         el.style.color=col; el.textContent=w.w; storyBox.appendChild(el);
       }
       wordCount.textContent=String(words.length);
@@ -476,7 +476,7 @@
 
           // Decide if we should auto-pass the turn to the peer after your first word
           const last = words[words.length-1];
-          const shouldAutoPass = (ids.length >= 2) && last && (last.by === myUid) && (cturn === myUid) && peerId;
+          const shouldAutoPass = (ids.length >= 2) && last && (last.by === myUid) && (!cturn || cturn === myUid) && peerId;
           if (shouldAutoPass) {
             cturn = peerId; // update local view immediately so UI doesn't grant you another turn
             update(sesRef,{currentTurnUid:peerId});
@@ -555,7 +555,7 @@
       try{
         await update(sesRef,{
           words:[...words,{ w:titleCaseFirstWordIfNeeded(words.length,word), by:myUid, c:myColourNow, t:Date.now() }],
-          currentTurnUid: peerUid || myUid
+          currentTurnUid: peerUid || null
         });
         wordInput.value="";
         if(!peerUid){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
