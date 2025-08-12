@@ -73,29 +73,7 @@
 
     .colourWrap.locked .swatch { opacity:.55; filter:grayscale(0.25); cursor:not-allowed; box-shadow:none; }
     .colourWrap.locked .swatchInput { pointer-events:none; }
-
-    .colourWrap.chosen .swatch { opacity:.8; }
-
-    /* Word wrapping & scroll for long stories */
-    .story {
-      white-space: pre-wrap;           /* respect line breaks, wrap normally */
-      overflow-wrap: anywhere;         /* break long unbroken strings */
-      word-break: break-word;          /* older fallback */
-      max-height: 50vh;                /* make long stories scrollable */
-      overflow-y: auto;
-    }
-    /* Dash look when colour is locked */
-    .swatch.dash {
-      width: auto;
-      min-width: 22px;
-      padding: 0 6px;
-      background: transparent !important;
-      color: #b9c0ff;
-      text-align: center;
-      line-height: 14px;
-    }
-
-  </style>
+</style>
 </head>
 <body>
   <div class="wrap">
@@ -286,51 +264,16 @@
     function myWordCount(words, uid){ 
       try { return (Array.isArray(words)?words:[]).reduce((n,w)=>n+((w&&w.by===uid)?1:0),0); } catch { return 0; } 
     }
-    
     function setColourLocked(locked){
       try{
         const wrap = colourSwatch.parentElement;
         colourPicker.disabled = !!locked;
         wrap.classList.toggle('locked', !!locked);
         colourSwatch.classList.toggle('is-locked', !!locked);
-        if (locked) {
-          // Hide the native colour input to avoid overlay/glitch
-          colourPicker.style.display = 'none';
-          // Show a simple dash instead of a colour swatch
-          colourSwatch.textContent = '—';
-          colourSwatch.classList.add('dash');
-          colourSwatch.style.background = 'transparent';
-          colourSwatch.title = "Colour locked for this session";
-        } else {
-          // Restore picker and swatch
-          colourPicker.style.display = 'block';
-          colourSwatch.textContent = '';
-          colourSwatch.classList.remove('dash');
-          setMyColourUI(colourPicker.value);
-          colourSwatch.title = "Pick your colour";
-        }
-      }catch{}
-    }
-
-    function setColourChosen(chosen){
-      try{
-        colourSwatch.parentElement.classList.toggle('chosen', !!chosen);
+        colourSwatch.title = locked ? "Colour locked for this session" : "Pick your colour";
       }catch{}
     }
 /* ========= Helpers ========= */
-    // Choose the peer deterministically based on who wrote last.
-    // Prefer the most recently active seat that is NOT the last writer; tie-break by uid.
-    function peerOfLastWriter(players, lastBy){
-      const ids = Object.keys(players||{}).filter(u => u !== lastBy);
-      if (ids.length === 1) return ids[0] || null;
-      ids.sort((a,b)=>{
-        const da=(players[a]?.lastActive||0), db=(players[b]?.lastActive||0);
-        if (db!==da) return db-da;
-        return String(a).localeCompare(String(b));
-      });
-      return ids[0] || null;
-    }
-
     // ---------- Turn helpers ----------
     function activePeerId(players, myUid){
       const now = Date.now();
@@ -532,8 +475,7 @@
           setDotColour(youDot, myEffectiveColour, !!mergedPlayers[myUid]);
           // If server doesn't have my colour yet, persist it once to players/<myUid>
           const serverHasColour = !!(players?.[myUid]?.colour);
-          // Only restore from an explicit prior choice
-          if (!serverHasColour && savedSessionColour) {
+          if (!serverHasColour && myEffectiveColour) {
             try { update(ref(db,`sessions/${derivedKey}/players/${myUid}`), { colour: myEffectiveColour }); } catch {}
           }
 
@@ -544,18 +486,6 @@
           setUIConnected(ids.length>0);
           renderStory(words,mergedPlayers);
 
-          // Canonicalize turn when unset or pointing to a missing seat:
-          // with two players and at least one word, the next turn is the OTHER of the last writer.
-          (function(){
-            const last = words[words.length-1] || null;
-            const cturnMissing = !cturn || !players[cturn];
-            if (cturnMissing && Object.keys(players).length >= 2 && last && last.by){
-              const candidate = Object.keys(players).find(u => u !== last.by) || last.by;
-              if (cturn !== candidate) { try { update(sesRef,{ currentTurnUid: candidate }); } catch {} }
-              cturn = candidate;
-            }
-          })();
-    
           
           
           // Recover cturn if it points at a missing seat
@@ -576,7 +506,6 @@
           // Enforce colour rules: must pick before first word; lock after first word
           const myWordsSoFar = myWordCount(words, myUid);
           const colourChosen = !!(players?.[myUid]?.colour);
-          setColourChosen(colourChosen);
           const locked = (myWordsSoFar > 0) || !!(players?.[myUid]?.colourLocked);
           setColourLocked(locked);
 
@@ -596,7 +525,15 @@
           const isMyTurn=(cturn===myUid)&&(ids.length===2);
           if(wasMyTurn===false && isMyTurn) playTurnSound();
           wasMyTurn=isMyTurn;
-saveLocal({sessionId:sid,myName});saveLocal({sessionId:sid,myName});
+
+          // Ensure lock after first word (idempotent)
+          try {
+            const myWordsSoFar2 = myWordCount(words, myUid);
+            if (myWordsSoFar2 > 0 && !players?.[myUid]?.colourLocked) {
+              await update(ref(db,`sessions/${derivedKey}/players/${myUid}`), { colourLocked: true });
+            }
+          } catch {}
+    saveLocal({sessionId:sid,myName});saveLocal({sessionId:sid,myName});
         });
 
         if(!auto){ wordInput.focus(); joinStatus.innerHTML='<span class="ok">Ready!</span>'; }
@@ -624,11 +561,16 @@ saveLocal({sessionId:sid,myName});saveLocal({sessionId:sid,myName});
         const last=loadLastSession(); if(!last) return;
         const sesRef=ref(db,`sessions/${last.derivedKey}`); const snap=await get(sesRef);
         const players=(snap.val()&&snap.val().players)||{}; const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId);
-        if(players[myUid]?.colourLocked){ return; }
+        if(players[myUid]?.colourLocked){
+          // Revert UI to effective colour and exit
+          const eff = (players?.[myUid]?.colour) || (Array.isArray((snap.val()||{}).words)? (function(){const w=(snap.val().words||[]); for(let i=w.length-1;i>=0;i--){ if(w[i]&&w[i].by===myUid&&w[i].c) return w[i].c; } return null;})() : null) || savedSessionColour || localColour[myUid] || colourPicker.value;
+          if(eff){ colourPicker.value = eff; setMyColourUI(eff); setDotColour(youDot, eff, true); }
+          return;
+        }
         const hex=colourPicker.value;
 
         // Instant UI
-        localColour[myUid]=hex; saveSessionColour(last.derivedKey, clientId, hex); setMyColourUI(hex); setDotColour(youDot,hex,true); setColourChosen(true);
+        localColour[myUid]=hex; saveSessionColour(last.derivedKey, clientId, hex); setMyColourUI(hex); setDotColour(youDot,hex,true);
 
         // Persist
         if(myUid) await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`),{ colour:hex, lastActive:Date.now() });
