@@ -126,10 +126,9 @@
           <div class="pill">Words: <span id="wordCount">0</span></div>
           <div class="pill">Status: <span id="statusDot">Offline</span></div>
           <div class="pill">
-            Colour:
+            Your colour:
             <span class="colourWrap">
-              <span id="colourSwatch" class="swatch" title="Pick your colour"></span>
-              <input id="colourPicker" type="color" class="swatchInput" value="#58a6ff" />
+              <span id="colourSwatch" class="swatch" title="Your assigned colour"></span>
             </span>
           </div>
         </div>
@@ -212,7 +211,7 @@
           wordCount = $("wordCount"), statusDot = $("statusDot"),
           storyBox = $("storyBox"), turnBanner = $("turnBanner"),
           wordInput = $("wordInput"), submitBtn = $("submitBtn"),
-          colourPicker = $("colourPicker"), colourSwatch = $("colourSwatch"),
+          colourSwatch = $("colourSwatch"),
           copyBtn = $("copyBtn"), downloadBtn = $("downloadBtn"), leaveBtn = $("leaveBtn"),
           errorBox = $("errorBox");
 
@@ -333,7 +332,7 @@
         }
 
         // --- Create/update player seat (DON'T overwrite colour if seat already exists) ---
-        const defaultColour= colourPicker.value || `#${Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,"0")}`;
+        const defaultColour = `#${Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,"0")}`;
         const myPlayerRef=ref(db,`sessions/${derivedKey}/players/${myUid}`);
         const seatExists = !!players[myUid];
 
@@ -355,7 +354,6 @@
 
         // Set local/UI colour from server if present, else default
         const myColourNow = (players[myUid]?.colour) || defaultColour;
-        colourPicker.value = myColourNow;
         localColour[myUid] = myColourNow;
         setMyColourUI(myColourNow);
 
@@ -374,11 +372,8 @@
           if(localColour[myUid]){ mergedPlayers[myUid]=mergedPlayers[myUid]||{}; mergedPlayers[myUid].colour=localColour[myUid]; }
           peerLabel.textContent=peerId?(players[peerId]?.name||"Partner"):"(none)";
 
-          // Sync picker & dots to server colour
+          // Update swatch and dot to server colour
           const myColourFromServer = mergedPlayers[myUid]?.colour;
-          if (myColourFromServer && colourPicker.value.toLowerCase() !== myColourFromServer.toLowerCase()) {
-            colourPicker.value = myColourFromServer;
-          }
           setMyColourUI(myColourFromServer);
           setDotColour(youDot, myColourFromServer, !!mergedPlayers[myUid]);
           setDotColour(peerDot, mergedPlayers[peerId]?.colour, !!mergedPlayers[peerId]);
@@ -423,33 +418,7 @@
     createBtn.onclick=()=>enterSession('create');
     joinBtn.onclick=()=>enterSession('join');
 
-    /* ========= Colour change: update UI instantly, then DB ========= */
-    async function handleColourChange(){
-      try{
-        const last=loadLastSession(); if(!last) return;
-        const sesRef=ref(db,`sessions/${last.derivedKey}`); const snap=await get(sesRef);
-        const players=(snap.val()&&snap.val().players)||{}; const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId);
-        if(!myUid) return;
-        const hex=colourPicker.value;
-        // If already locked, ignore further changes and snap back
-        if(players[myUid]?.colour){
-          const lockedHex = players[myUid].colour;
-          colourPicker.value = lockedHex;
-          setMyColourUI(lockedHex);
-          setDotColour(youDot, lockedHex, true);
-          return;
-        }
-        // Save pending locally and update UI; do NOT write to DB yet
-        localColour[myUid]=hex;
-        setMyColourUI(hex);
-        setDotColour(youDot,hex,true);
-      }catch(e){ console.error(e); }
-    }
-    colourPicker.addEventListener("input",handleColourChange);
-    colourPicker.addEventListener("change",handleColourChange);
-
-    
-/* ========= Submit word ========= */
+    /* ========= Submit word ========= */
     submitBtn.onclick=async ()=>{
       errorBox.textContent="";
       let word=(wordInput.value||"").trim(); if(!word) return;
@@ -463,11 +432,8 @@
       if(ses.currentTurnUid!==myUid){ errorBox.textContent="Not your turn yet."; wordInput.value=""; return; }
       if(!WORD_RX.test(word)){ errorBox.textContent="Invalid word. Use letters, apostrophes, hyphens, optional .,!? at end."; return; }
 
-      // Colour: require a choice before first submit; lock on first submit
-      const locked = players[myUid]?.colour || null;
-      const pending = colourPicker.value && colourPicker.value.trim() ? colourPicker.value : null;
-      if(!locked && !pending){ errorBox.textContent="Pick a colour first."; return; }
-      const myColourNow = locked || pending || "#58a6ff";
+            // Colour: always use your assigned session colour
+      const myColourNow = players[myUid]?.colour || "#58a6ff";;
 
       const words=Array.isArray(ses.words)?ses.words:[]; const peerUid=Object.keys(players).find(k=>k!==myUid);
 
@@ -475,12 +441,9 @@
         await update(sesRef,{
           words:[...words,{ w:titleCaseFirstWordIfNeeded(words.length,word), by:myUid, c:myColourNow, t:Date.now() }],
           currentTurnUid: (peerUid || null),
-          ...(locked ? {} : { [`players/${myUid}/colour`]: myColourNow })
         });
         await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`),{lastActive:Date.now()});
 
-        // Disable picker if we just locked
-        if(!locked){ colourPicker.disabled = true; }
 
         wordInput.value="";
         if(!peerUid){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
