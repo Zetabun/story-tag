@@ -13,8 +13,8 @@
     p.sub { margin:0 0 18px; color:#b9c0ff; }
     .grid { display:grid; gap:12px; grid-template-columns: 1fr; }
     label { font-size:14px; color:#b9c0ff; }
-    input[type="text"] { width:100%; padding:12px 14px; border-radius:10px; border:1px solid #303659; background:#0f1328; color:#fff; }
-    input[type="text"]::placeholder { color:#8890b3; }
+    input[type="text"], input[type="password"] { width:100%; padding:12px 14px; border-radius:10px; border:1px solid #303659; background:#0f1328; color:#fff; }
+    input[type="text"]::placeholder, input[type="password"]::placeholder { color:#8890b3; }
     input[disabled] { opacity:.6; }
     button { padding:12px 16px; border-radius:10px; border:1px solid #39406a; background:#2a2f4a; color:#fff; cursor:pointer; transition:.15s transform ease; }
     button:hover { transform: translateY(-1px); }
@@ -45,16 +45,14 @@
       display:inline-block; vertical-align:middle;
       box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
     }
-    .swatchInput{
-      position:absolute; inset:0; opacity:0; cursor:pointer;
-    }
+    .swatchInput{ position:absolute; inset:0; opacity:0; cursor:pointer; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
       <h1>Story Tag</h1>
-      <p class="sub">Enter a Session ID and your name. When someone else joins with the same ID, you’ll take turns adding one word each to build a story.</p>
+      <p class="sub">Enter a Session ID and password to create a private room. Share both with your friend to join the same session.</p>
 
       <div id="auth" class="grid">
         <div>
@@ -63,8 +61,12 @@
         </div>
         <div>
           <label for="sessionId">Session ID</label>
-          <input id="sessionId" type="text" maxlength="12" placeholder="e.g., 343w4" />
-          <div class="small hint">Exactly two players per session. Reuse the same ID to rejoin.</div>
+          <input id="sessionId" type="text" maxlength="32" placeholder="e.g., 343w4 (friendly name)" />
+          <div class="small hint">This is just a friendly label. Privacy comes from the password-derived key.</div>
+        </div>
+        <div>
+          <label for="password">Password</label>
+          <input id="password" type="password" maxlength="64" placeholder="Required (you and your friend must use the same one)" />
         </div>
         <div class="row">
           <button id="joinBtn">Join Session</button>
@@ -150,7 +152,7 @@
     const $ = id => document.getElementById(id);
     const joinBtn = $("joinBtn"), joinStatus = $("joinStatus"),
           auth = $("auth"), game = $("game"),
-          nameInput = $("name"), sessionInput = $("sessionId"),
+          nameInput = $("name"), sessionInput = $("sessionId"), passwordInput = $("password"),
           sessionLabel = $("sessionLabel"),
           youLabel = $("youLabel"), peerLabel = $("peerLabel"),
           youDot = $("youDot"), peerDot = $("peerDot"),
@@ -162,7 +164,9 @@
           errorBox = $("errorBox");
 
     // State
-    let sessionId = null, myUid = null, myName = null, peerName = null, unsubSession = null;
+    let sessionId = null;        // friendly label (shown in UI)
+    let derivedKey = null;       // hashed key used for Firebase paths
+    let myUid = null, myName = null, peerName = null, unsubSession = null;
     let audioCtx = null, canPlaySound = false, wasMyTurn = null;
 
     // ----- Stable client id for seat reclaim -----
@@ -174,7 +178,7 @@
     }
     const clientId = getClientId();
 
-    // Local backup
+    // Local backup (for convenience — NOT storing password)
     const LS_KEY = "storytag_state_v1";
     function saveLocal(state) { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
     function loadLocal() { try { return JSON.parse(localStorage.getItem(LS_KEY) || "{}"); } catch { return {}; } }
@@ -194,6 +198,16 @@
       if (!hex) return;
       colourSwatch.style.background = hex;
       youDot.style.background = hex;
+    }
+
+    // Crypto helpers: SHA-256 + base64url
+    async function sha256Base64Url(input) {
+      const enc = new TextEncoder();
+      const hash = await crypto.subtle.digest("SHA-256", enc.encode(input));
+      const bytes = new Uint8Array(hash);
+      let bin = "";
+      for (let b of bytes) bin += String.fromCharCode(b);
+      return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
     }
 
     // Render story as coloured spans
@@ -249,10 +263,13 @@
       } catch {}
     }
 
-    // Prefill
+    // Prefill (name + friendly session only; password is never stored)
     (function tryResume() {
       const saved = loadLocal();
-      if (saved.sessionId && saved.myName && saved.myUid) { nameInput.value = saved.myName; sessionInput.value = saved.sessionId; }
+      if (saved.sessionId && saved.myName) {
+        nameInput.value = saved.myName;
+        sessionInput.value = saved.sessionId;
+      }
     })();
 
     // Join
@@ -260,16 +277,21 @@
       canPlaySound = true;
       errorBox.textContent = "";
       const name = nameInput.value.trim();
-      const sid = sessionInput.value.trim().toLowerCase();
+      const sid = sessionInput.value.trim();
+      const pwd = passwordInput.value;
+
       if (!name) { joinStatus.innerHTML = '<span class="err">Enter your name</span>'; return; }
-      if (!sid) { joinStatus.innerHTML = '<span class="err">Enter a session ID</span>'; return; }
+      if (!sid)  { joinStatus.innerHTML = '<span class="err">Enter a session ID</span>'; return; }
+      if (!pwd)  { joinStatus.innerHTML = '<span class="err">Enter a password</span>'; return; }
 
       joinBtn.disabled = true; joinStatus.textContent = "Joining…";
 
       try {
+        // Derive unguessable DB key from (sessionId + ":" + password)
         sessionId = sid;
+        derivedKey = await sha256Base64Url(`${sid}:${pwd}`);
 
-        const sesRef = ref(db, `sessions/${sessionId}`);
+        const sesRef = ref(db, `sessions/${derivedKey}`);
         const snap = await get(sesRef);
         const existing = snap.val() || {};
         const players = existing.players || {};
@@ -297,14 +319,17 @@
 
         // Create session if new
         if (!snap.exists()) {
-          await set(sesRef, { createdAt: serverTimestamp(), words: [], currentTurnUid: myUid, players: {} });
+          await set(sesRef, { createdAt: serverTimestamp(), friendlyId: sessionId, words: [], currentTurnUid: myUid, players: {} });
+        } else if (!existing.friendlyId) {
+          // backfill friendlyId once
+          await update(sesRef, { friendlyId: existing.friendlyId || sessionId });
         }
 
         // Default colour
         const defaultColour = colourPicker.value || `#${Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,"0")}`;
 
         // Write/overwrite my seat atomically with clientId
-        const myPlayerRef = ref(db, `sessions/${sessionId}/players/${myUid}`);
+        const myPlayerRef = ref(db, `sessions/${derivedKey}/players/${myUid}`);
         await set(myPlayerRef, {
           uid: myUid,
           clientId,                // <-- seat reclaim key
@@ -319,7 +344,7 @@
         // UI switch
         auth.style.display = "none";
         game.style.display = "block";
-        sessionLabel.textContent = sessionId;
+        sessionLabel.textContent = sessionId; // show friendly ID
         youLabel.textContent = myName;
         colourPicker.value = players[myUid]?.colour || defaultColour;
         setMyColourUI(colourPicker.value);
@@ -373,20 +398,8 @@
           if (wasMyTurn === false && isMyTurn) playTurnSound();
           if (wasMyTurn === null) wasMyTurn = isMyTurn; else wasMyTurn = isMyTurn;
 
-          // Save local
-          saveLocal({ sessionId, myUid, myName });
-
-          // Starter if needed
-          if (!cturn && ids.length === 2) {
-            const sorted = ids.sort();
-            update(sesRef, { currentTurnUid: sorted[0] });
-          }
-
-          // Keep picker/swatch in sync if changed elsewhere
-          if (players[myUid]?.colour && colourPicker.value !== players[myUid].colour) {
-            colourPicker.value = players[myUid].colour;
-            setMyColourUI(players[myUid].colour);
-          }
+          // Save local (no password stored)
+          saveLocal({ sessionId, myName });
         });
 
         wordInput.focus();
@@ -399,13 +412,13 @@
       }
     };
 
-    // Picker change -> update swatch + Firebase
+    // Colour picker change -> update swatch + Firebase
     colourPicker.addEventListener("input", async () => {
       try {
-        if (!sessionId || !myUid) return;
+        if (!derivedKey || !myUid) return;
         const hex = colourPicker.value;
         setMyColourUI(hex);
-        await update(ref(db, `sessions/${sessionId}/players/${myUid}`), { colour: hex });
+        await update(ref(db, `sessions/${derivedKey}/players/${myUid}`), { colour: hex });
       } catch (e) { console.error(e); }
     });
 
@@ -415,7 +428,7 @@
       let word = (wordInput.value || "").trim();
       if (!word) return;
 
-      const sesRef = ref(db, `sessions/${sessionId}`);
+      const sesRef = ref(db, `sessions/${derivedKey}`);
       const sesSnap = await get(sesRef);
       const ses = sesSnap.val();
       if (!ses) { errorBox.textContent = "Session not found."; return; }
@@ -453,18 +466,24 @@
       a.download = `story-${sessionId || "session"}.txt`;
       a.click(); URL.revokeObjectURL(a.href);
     };
-    leaveBtn.onclick = async () => { try { if (sessionId && myUid) await remove(ref(db, `sessions/${sessionId}/players/${myUid}`)); } catch {} location.reload(); };
+    leaveBtn.onclick = async () => {
+      try {
+        if (derivedKey && myUid) await remove(ref(db, `sessions/${derivedKey}/players/${myUid}`));
+      } catch {}
+      location.reload();
+    };
 
     // Keyboard shortcuts
     wordInput.addEventListener("keydown", (e) => { if (e.key === "Enter") submitBtn.click(); });
     sessionInput.addEventListener("keydown", (e) => { if (e.key === "Enter") joinBtn.click(); });
+    passwordInput.addEventListener("keydown", (e) => { if (e.key === "Enter") joinBtn.click(); });
 
     // Minor status tweak on tab hide/show
     document.addEventListener("visibilitychange", () => { statusDot.textContent = document.hidden ? "Background" : "Connected"; });
   </script>
 
   <div style="position:fixed;bottom:10px;left:50%;transform:translateX(-50%);font-size:12px;color:#9aa3d7;">
-    Built for fun — share your Session ID with a friend and take turns!
+    Built for fun — share your Session ID + Password with a friend and take turns!
   </div>
 </body>
 </html>
