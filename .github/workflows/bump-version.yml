@@ -1,0 +1,43 @@
+name: Bump version (patch) on push
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - ".github/workflows/**"
+      - "**/*.md"
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip-bump]')"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read current version
+        id: read
+        run: |
+          if [ ! -f version.json ]; then echo '{"version":"0.1.0"}' > version.json; fi
+          CURR=$(jq -r .version version.json | sed 's/^v//')
+          echo "current=$CURR" >> $GITHUB_OUTPUT
+
+      - name: Bump patch
+        id: bump
+        run: |
+          IFS='.' read -r MA MI PA <<< "${{ steps.read.outputs.current }}"
+          : "${MA:=0}" ; : "${MI:=1}" ; : "${PA:=0}"
+          NEW="$MA.$MI.$((PA+1))"
+          jq -r --arg v "$NEW" '.version=$v' version.json > version.json.tmp && mv version.json.tmp version.json
+          echo "new=$NEW" >> $GITHUB_OUTPUT
+
+      - name: Commit updated version.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add version.json
+          git commit -m "chore: bump version to v${{ steps.bump.outputs.new }}"
+          git push
