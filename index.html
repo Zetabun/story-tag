@@ -368,6 +368,17 @@
           const meP=presenceOf(players[myUid]?.lastActive); const peP=presenceOf(players[peerId]?.lastActive);
           youPresence.className=`presence ${meP.cls}`; youPresence.textContent=meP.label;
           peerPresence.className=`presence ${peP.cls}`; peerPresence.textContent=peP.label;
+
+          // Find the most recent word by me and use its colour as a fallback
+          function lastWordColourBy(uid, wordsArr){
+            if (!Array.isArray(wordsArr)) return null;
+            for (let i = wordsArr.length - 1; i >= 0; i--) {
+              const w = wordsArr[i];
+              if (w && w.by === uid && w.c) return w.c;
+            }
+            return null;
+          }
+
           // Merge colour: prefer server; only fall back to local if server missing
           const mergedPlayers=JSON.parse(JSON.stringify(players||{}));
           const serverColour = players?.[myUid]?.colour || null;
@@ -382,10 +393,11 @@
           peerLabel.textContent=peerId?(players[peerId]?.name||"Partner"):"(none)";
 
           // Sync picker & dots to server colour
-          const myEffectiveColour = (players?.[myUid]?.colour) || localColour[myUid] || colourPicker.value || "#58a6ff";
+          const myEffectiveColour = (players?.[myUid]?.colour) || lastWordColourBy(myUid, words) || localColour[myUid] || colourPicker.value || "#58a6ff";
           if (myEffectiveColour && colourPicker.value.toLowerCase() !== myEffectiveColour.toLowerCase()) {
             colourPicker.value = myEffectiveColour;
           }
+          localColour[myUid] = myEffectiveColour;
           setMyColourUI(myEffectiveColour);
           setDotColour(youDot, myEffectiveColour, !!mergedPlayers[myUid]);
 
