@@ -340,7 +340,7 @@
         if (seatExists) {
           await update(myPlayerRef, { uid:myUid, clientId, name:myName, lastActive:Date.now() });
         } else {
-          await set(myPlayerRef, { uid:myUid, clientId, name:myName, colour:defaultColour, joinedAt:serverTimestamp(), lastActive:Date.now() });
+          await set(myPlayerRef, { uid:myUid, clientId, name:myName, joinedAt:serverTimestamp(), lastActive:Date.now() });
         }
         onDisconnect(myPlayerRef).remove();
         window.addEventListener("unload",()=>{ try{ navigator.sendBeacon && remove(myPlayerRef); }catch{} });
@@ -355,10 +355,12 @@
         colourPicker.disabled = true;
 
         // Set local/UI colour from server if present, else default
-        const myColourNow = (players[myUid]?.colour) || defaultColour;
-        colourPicker.value = myColourNow;
-        localColour[myUid] = myColourNow;
-        setMyColourUI(myColourNow);
+        const myColourNow = (players[myUid]?.colour) || null;
+        if (myColourNow) {
+          colourPicker.value = myColourNow;
+          localColour[myUid] = myColourNow;
+          setMyColourUI(myColourNow);
+        }
 
         // Subscribe to session
         if(window._unsub) window._unsub();
@@ -387,6 +389,7 @@
           setUIConnected(ids.length>0);
           renderStory(words,mergedPlayers);
 
+          let gatingActive = false;
           // Default: keep picker disabled unless explicitly allowed below
           try { colourPicker.disabled = true; } catch {}
 
@@ -396,6 +399,7 @@
             const colourChosen = !!(players && players[myUid] && players[myUid].colour);
             const allowedToChooseNow = (cturn === myUid) && !colourChosen && (myWordsSoFar === 0);
             if (allowedToChooseNow) {
+              gatingActive = true;
               colourPicker.disabled = false;
               colourPicker.style.display = 'block';
               submitBtn.disabled = true;
@@ -406,8 +410,10 @@
     
 
           if(cturn && !players[cturn] && ids.length>0){ const newTurn=ids[0]; update(sesRef,{currentTurnUid:newTurn}); cturn=newTurn; }
-          if(ids.length<2 && words.length>0){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
-          else setTurnBanner(cturn,players,myUid);
+          if(!gatingActive){
+            if(ids.length<2 && words.length>0){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
+            else setTurnBanner(cturn,players,myUid);
+          }
 
           const last=words[words.length-1]; const isMyTurn=(cturn===myUid)&&(ids.length===2);
           if(ids.length===2 && last && last.by===myUid && cturn===myUid && peerId){ update(sesRef,{currentTurnUid:peerId}); }
