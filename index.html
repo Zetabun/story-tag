@@ -398,7 +398,7 @@
           // Unlock only if (1) it's my turn, (2) I haven't chosen a colour, (3) I haven't written before
           try {
             const myWordsSoFar = (Array.isArray(words)?words:[]).reduce((n,w)=>n+((w&&w.by===myUid)?1:0),0);
-            const colourChosen = !!(players && players[myUid] && players[myUid].colour);
+            const colourChosen = !!(players && players[myUid] && players[myUid].colour) || !!(typeof loadSessionColour==='function' && loadSessionColour(derivedKey, clientId));
             const allowedToChooseNow = (cturn === myUid) && !colourChosen && (myWordsSoFar === 0);
             if (allowedToChooseNow) {
               gatingActive = true;
@@ -463,7 +463,7 @@ async function handleColourChange(){
         const hex=colourPicker.value;
 
         // Instant UI
-        localColour[myUid]=hex; saveSessionColour(last.derivedKey, clientId, hex); setMyColourUI(hex); setDotColour(youDot,hex,true);
+        localColour[myUid]=hex; saveSessionColour(last.derivedKey, clientId, hex); saveSessionColour(last.derivedKey, clientId, hex); setMyColourUI(hex); setDotColour(youDot,hex,true);
 
         // Persist to my player record
         await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`),{ colour:hex, lastActive:Date.now() });
