@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Story Tag — Two-Player Word Game</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif; }
+    body { margin: 0; background:#0f1220; color:#f5f7ff; display:flex; min-height:100vh; }
+    .wrap { margin:auto; width:min(900px, 92vw); padding:24px; }
+    .card { background:#171a2b; border:1px solid #2a2f4a; border-radius:14px; padding:20px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    h1 { margin:0 0 6px; font-size: clamp(24px, 4vw, 34px); letter-spacing:.3px; }
+    p.sub { margin:0 0 18px; color:#b9c0ff; }
+    .grid { display:grid; gap:12px; grid-template-columns: 1fr; }
+    label { font-size:14px; color:#b9c0ff; }
+    input[type="text"] { width:100%; padding:12px 14px; border-radius:10px; border:1px solid #303659; background:#0f1328; color:#fff; }
+    input[type="text"]::placeholder { color:#8890b3; }
+    input[disabled] { opacity:.6; }
+    button { padding:12px 16px; border-radius:10px; border:1px solid #39406a; background:#2a2f4a; color:#fff; cursor:pointer; transition:.15s transform ease; }
+    button:hover { transform: translateY(-1px); }
+    button:disabled { opacity:.55; cursor:not-allowed; transform:none; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .hint { font-size:13px; color:#9aa3d7; }
+    .ok { color:#69f0ae; }
+    .warn { color:#ffd166; }
+    .err { color:#ff6b6b; }
+    .story { background:#0c0f22; border:1px solid #2a2f4a; border-radius:12px; padding:14px; min-height:100px; white-space:pre-wrap; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; }
+    .pill { padding:6px 10px; border-radius:999px; background:#1c2142; border:1px solid #2a2f4a; color:#c6cdff; font-size:12px; }
+    .muted { color:#9aa3d7; font-size:14px; }
+    .spacer { height:10px; }
+    .turn { font-weight:600; }
+    .nameTag { font-weight:700; }
+    .small { font-size:12px; color:#9aa3d7; }
+    .divider { height:1px; background:#2a2f4a; margin:14px 0; }
+    a { color:#a6b3ff; text-decoration:none; }
+
+    /* Online dots */
+    .tag { display:inline-flex; align-items:center; gap:6px; }
+    .dot { width:8px; height:8px; border-radius:50%; background:#666; box-shadow: 0 0 0 1px rgba(255,255,255,.12) inset; }
+    .dot.online { background:#69f0ae; }
+    .dot.away { background:#ffd166; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Story Tag</h1>
+      <p class="sub">Enter a Session ID and your name. When someone else joins with the same ID, you’ll take turns adding one word each to build a story.</p>
+
+      <div id="auth" class="grid">
+        <div>
+          <label for="name">Your name</label>
+          <input id="name" type="text" maxlength="24" placeholder="e.g., Alex" />
+        </div>
+        <div>
+          <label for="sessionId">Session ID</label>
+          <input id="sessionId" type="text" maxlength="12" placeholder="e.g., 343w4" />
+          <div class="small hint">Exactly two players per session. Reuse the same ID to rejoin.</div>
+        </div>
+        <div class="row">
+          <button id="joinBtn">Join Session</button>
+          <div id="joinStatus" class="small"></div>
+        </div>
+      </div>
+
+      <div id="game" style="display:none">
+        <div class="row">
+          <div class="pill">Session: <span id="sessionLabel"></span></div>
+          <div class="pill">You:
+            <span class="tag">
+              <span id="youDot" class="dot"></span>
+              <span id="youLabel" class="nameTag"></span>
+            </span>
+          </div>
+          <div class="pill">Partner:
+            <span class="tag">
+              <span id="peerDot" class="dot"></span>
+              <span id="peerLabel"></span>
+            </span>
+          </div>
+          <div class="pill">Words: <span id="wordCount">0</span></div>
+          <div class="pill">Status: <span id="statusDot">Waiting…</span></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="story" id="storyBox">(No words yet—be the first to write!)</div>
+        <div class="spacer"></div>
+
+        <div id="turnBanner" class="muted">Waiting for partner…</div>
+        <div class="spacer"></div>
+
+        <div class="row">
+          <input id="wordInput" type="text" placeholder="Your word…" autocomplete="off" />
+          <button id="submitBtn">Add Word</button>
+        </div>
+        <div class="hint">Rules: one word per turn. Letters, apostrophes and hyphens allowed. First word auto-capitalized.</div>
+
+        <div class="divider"></div>
+
+        <div class="toolbar">
+          <button id="copyBtn">Copy story</button>
+          <button id="downloadBtn">Download .txt</button>
+          <button id="leaveBtn">Leave session</button>
+        </div>
+        <div id="errorBox" class="small err"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase (v9+ modular) via CDN -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getDatabase, ref, get, set, update, onValue, serverTimestamp,
+      onDisconnect, runTransaction
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+    // === Your Firebase config (with databaseURL) ===
+    const firebaseConfig = {
+      apiKey: "AIzaSyDf-zLudeu9OUiDVj984bDCtoZ-ehs_uD0",
+      authDomain: "zetabun-91b0c.firebaseapp.com",
+      databaseURL: "https://zetabun-91b0c-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "zetabun-91b0c",
+      storageBucket: "zetabun-91b0c.firebasestorage.app",
+      messagingSenderId: "594713569270",
+      appId: "1:594713569270:web:fa1d230bd5fd1ce28549d7",
+      measurementId: "G-SQR25FYPLC"
+    };
+
+    // App init
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // Elements
+    const $ = id => document.getElementById(id);
+    const joinBtn = $("joinBtn");
+    const joinStatus = $("joinStatus");
+    const auth = $("auth");
+    const game = $("game");
+    const nameInput = $("name");
+    const sessionInput = $("sessionId");
+    const sessionLabel = $("sessionLabel");
+    const youLabel = $("youLabel");
+    const peerLabel = $("peerLabel");
+    const youDot = $("youDot");
+    const peerDot = $("peerDot");
+    const wordCount = $("wordCount");
+    const statusDot = $("statusDot");
+    const storyBox = $("storyBox");
+    const turnBanner = $("turnBanner");
+    const wordInput = $("wordInput");
+    const submitBtn = $("submitBtn");
+    const copyBtn = $("copyBtn");
+    const downloadBtn = $("downloadBtn");
+    const leaveBtn = $("leaveBtn");
+    const errorBox = $("errorBox");
+
+    // Local state
+    let sessionId = null;
+    let myUid = null;
+    let myName = null;
+    let peerName = null;
+    let unsubSession = null;
+
+    // Audio state
+    let audioCtx = null;
+    let canPlaySound = false;
+    let wasMyTurn = null; // track turn state to detect handoff
+
+    // Local backup
+    const LS_KEY = "storytag_state_v1";
+    function saveLocal(state) { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+    function loadLocal() { try { return JSON.parse(localStorage.getItem(LS_KEY) || "{}"); } catch { return {}; } }
+
+    // Word validation: one token (letters, apostrophes, hyphens)
+    const WORD_RX = /^[A-Za-z]+(?:['-][A-Za-z]+)*$/;
+
+    function titleCaseFirstWordIfNeeded(i, word) {
+      if (i === 0 && word.length) return word[0].toUpperCase() + word.slice(1).toLowerCase();
+      return word.toLowerCase();
+    }
+
+    function renderStory(words) {
+      const body = words.map(w => w.w).join(" ");
+      storyBox.textContent = body || "(No words yet—be the first to write!)";
+      wordCount.textContent = String(words.length);
+    }
+
+    function setUIConnected(connected) {
+      statusDot.textContent = connected ? "Connected" : "Offline";
+    }
+
+    function escapeHtml(s) {
+      return (s || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#039;'}[c]));
+    }
+
+    function setTurnBanner(currentTurnUid, players) {
+      if (!players || !players[myUid]) {
+        turnBanner.textContent = "Waiting…";
+        return;
+      }
+      const mine = currentTurnUid === myUid;
+      const theirUid = Object.keys(players).find(k => k !== myUid);
+      const their = theirUid ? players[theirUid] : null;
+
+      if (mine) {
+        turnBanner.innerHTML = `It’s <span class="turn">your</span> turn to write`;
+      } else if (their) {
+        const safeName = escapeHtml(their?.name || "Partner");
+        turnBanner.innerHTML = `<span class="nameTag">${safeName}</span>’s turn to write`;
+      } else {
+        turnBanner.textContent = "Waiting for partner…";
+      }
+      submitBtn.disabled = !mine;
+      wordInput.disabled = !mine;
+      if (mine) wordInput.focus();
+    }
+
+    function setDot(el, online) {
+      el.classList.toggle("online", !!online);
+      el.classList.toggle("away", !online);
+    }
+
+    // Sound: gentle two-tone ping
+    function ensureAudio() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    function playTurnSound() {
+      if (!canPlaySound) return; // only after user interaction
+      try {
+        ensureAudio();
+        const now = audioCtx.currentTime;
+        const g = audioCtx.createGain();
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.exponentialRampToValueAtTime(0.12, now + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+        g.connect(audioCtx.destination);
+
+        const o1 = audioCtx.createOscillator();
+        o1.type = "sine";
+        o1.frequency.setValueAtTime(660, now);
+        o1.frequency.linearRampToValueAtTime(880, now + 0.2);
+        o1.connect(g);
+        o1.start(now);
+        o1.stop(now + 0.35);
+      } catch {}
+    }
+
+    // Attempt Resume (prefill)
+    (function tryResume() {
+      const saved = loadLocal();
+      if (saved.sessionId && saved.myName && saved.myUid) {
+        nameInput.value = saved.myName;
+        sessionInput.value = saved.sessionId;
+      }
+    })();
+
+    joinBtn.onclick = async () => {
+      // Unlock audio after user gesture
+      canPlaySound = true;
+
+      errorBox.textContent = "";
+      const name = nameInput.value.trim();
+      const sid = sessionInput.value.trim().toLowerCase();
+      if (!name) { joinStatus.innerHTML = '<span class="err">Enter your name</span>'; return; }
+      if (!sid) { joinStatus.innerHTML = '<span class="err">Enter a session ID</span>'; return; }
+
+      joinBtn.disabled = true;
+      joinStatus.textContent = "Joining…";
+
+      try {
+        // Simple UID for this browser session (for production, consider auth or crypto-random)
+        myUid = "u_" + Math.random().toString(36).slice(2, 10);
+        myName = name;
+        sessionId = sid;
+
+        const sesRef = ref(db, `sessions/${sessionId}`);
+        const snap = await get(sesRef);
+        let players = (snap.val() && snap.val().players) || {};
+
+        // Enforce max 2 players
+        const playerIds = Object.keys(players);
+        if (playerIds.length >= 2) {
+          joinStatus.innerHTML = '<span class="err">Session is full (2/2)</span>';
+          joinBtn.disabled = false;
+          return;
+        }
+
+        // If there is exactly 1 player and they used the same name, append “(2)”
+        if (playerIds.length === 1) {
+          const existing = players[playerIds[0]];
+          if (existing && existing.name && existing.name.trim().toLowerCase() === name.toLowerCase()) {
+            myName = `${name} (2)`;
+          }
+        }
+
+        // If session doesn't exist yet, set base structure
+        if (!snap.exists()) {
+          await set(sesRef, {
+            createdAt: serverTimestamp(),
+            words: [],
+            currentTurnUid: myUid, // first joiner starts
+            players: {}
+          });
+        }
+
+        // Add me as a player
+        await update(ref(db, `sessions/${sessionId}/players`), {
+          [myUid]: {
+            uid: myUid,
+            name: myName,
+            joinedAt: serverTimestamp(),
+            online: true
+          }
+        });
+
+        // Presence handling
+        onDisconnect(ref(db, `sessions/${sessionId}/players/${myUid}/online`)).set(false);
+
+        // Safety: transaction to prevent race > 2 players
+        await runTransaction(ref(db, `sessions/${sessionId}/players`), (current) => {
+          current = current || {};
+          const ids = Object.keys(current);
+          if (ids.length > 2) return; // abort
+          return current;
+        });
+
+        // UI switch
+        auth.style.display = "none";
+        game.style.display = "block";
+        sessionLabel.textContent = sessionId;
+        youLabel.textContent = myName;
+
+        // Subscribe to session changes
+        if (unsubSession) unsubSession();
+        unsubSession = onValue(sesRef, (s) => {
+          const val = s.val() || {};
+          const players = val.players || {};
+          const words = val.words || [];
+          const cturn = val.currentTurnUid;
+          const playerIdsNow = Object.keys(players);
+
+          // Resolve peer name
+          const peerId = playerIdsNow.find(k => k !== myUid);
+          peerName = peerId ? (players[peerId]?.name || "Partner") : null;
+          peerLabel.textContent = peerName || "(none)";
+
+          // Online dots
+          setDot(youDot, players[myUid]?.online);
+          setDot(peerDot, peerId ? players[peerId]?.online : false);
+
+          // Connection-ish indicator
+          const anyOnline = Object.values(players).some(p => p && p.online);
+          setUIConnected(anyOnline);
+
+          renderStory(words);
+
+          // --- SOLO LOCK LOGIC ---
+          // If only 1 player and there is at least 1 word, grey out input and wait
+          if (playerIdsNow.length < 2 && words.length > 0) {
+            submitBtn.disabled = true;
+            wordInput.disabled = true;
+            turnBanner.textContent = "Waiting for partner…";
+          } else {
+            // Normal alternating turns
+            setTurnBanner(cturn, players);
+          }
+
+          // --- AUTO-HANDOFF WHEN PARTNER ARRIVES ---
+          // If two players are present now, last word was mine, and turn still on me, hand off to peer.
+          const last = words[words.length - 1];
+          if (playerIdsNow.length === 2 && last && last.by === myUid && cturn === myUid && peerId) {
+            update(sesRef, { currentTurnUid: peerId });
+          }
+
+          // Turn sound: play when it becomes your turn and there are two players
+          const isMyTurn = (cturn === myUid) && (playerIdsNow.length === 2);
+          if (wasMyTurn === false && isMyTurn) {
+            playTurnSound();
+          }
+          if (wasMyTurn === null) {
+            // Initialize state without sound on first render
+            wasMyTurn = isMyTurn;
+          } else {
+            wasMyTurn = isMyTurn;
+          }
+
+          // Save local snapshot for resume
+          saveLocal({ sessionId, myUid, myName });
+
+          // If exactly 2 players and no starter set, pick deterministically
+          if (!cturn && playerIdsNow.length === 2) {
+            const sorted = playerIdsNow.sort();
+            update(sesRef, { currentTurnUid: sorted[0] });
+          }
+        });
+
+        // Focus input if it’s our turn (or for the first word if solo)
+        wordInput.focus();
+        joinStatus.innerHTML = '<span class="ok">Joined!</span>';
+
+      } catch (e) {
+        console.error(e);
+        joinStatus.innerHTML = '<span class="err">Failed to join. Check console & Firebase config.</span>';
+        joinBtn.disabled = false;
+      }
+    };
+
+    submitBtn.onclick = async () => {
+      errorBox.textContent = "";
+      let word = (wordInput.value || "").trim();
+      if (!word) return;
+      const sesRef = ref(db, `sessions/${sessionId}`);
+      const sesSnap = await get(sesRef);
+      const ses = sesSnap.val();
+      if (!ses) { errorBox.textContent = "Session not found."; return; }
+
+      const players = ses.players || {};
+      const words = ses.words || [];
+      const playerIds = Object.keys(players);
+      const peerUid = playerIds.find(k => k !== myUid);
+
+      // Must be my turn (unless it's the very first word and I'm solo and I already have the turn)
+      if (ses.currentTurnUid !== myUid) {
+        errorBox.textContent = "Not your turn yet.";
+        wordInput.value = "";
+        return;
+      }
+
+      // Validate & format word
+      if (!WORD_RX.test(word)) {
+        errorBox.textContent = "One word only (letters, apostrophes, hyphens).";
+        return;
+      }
+      word = titleCaseFirstWordIfNeeded(words.length, word);
+
+      try {
+        // If no partner yet: keep turn set to me, but immediately grey out locally.
+        const nextTurnUid = peerUid || myUid;
+
+        await update(sesRef, {
+          words: [...words, { w: word, by: myUid, t: Date.now() }],
+          currentTurnUid: nextTurnUid
+        });
+
+        // Immediately lock locally if solo after first word
+        if (!peerUid) {
+          submitBtn.disabled = true;
+          wordInput.disabled = true;
+          turnBanner.textContent = "Waiting for partner…";
+        }
+
+        wordInput.value = "";
+      } catch (e) {
+        console.error(e);
+        errorBox.textContent = "Failed to add word. Check your connection.";
+      }
+    };
+
+    copyBtn.onclick = async () => {
+      const text = storyBox.textContent || "";
+      await navigator.clipboard.writeText(text);
+      copyBtn.textContent = "Copied!";
+      setTimeout(() => (copyBtn.textContent = "Copy story"), 1200);
+    };
+
+    downloadBtn.onclick = () => {
+      const text = storyBox.textContent || "";
+      const blob = new Blob([text], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `story-${sessionId || "session"}.txt`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    };
+
+    leaveBtn.onclick = async () => {
+      try {
+        if (sessionId && myUid) {
+          await update(ref(db, `sessions/${sessionId}/players/${myUid}`), { online: false });
+        }
+      } catch {}
+      location.reload();
+    };
+
+    // Enter to submit / join
+    wordInput.addEventListener("keydown", (e) => { if (e.key === "Enter") submitBtn.click(); });
+    sessionInput.addEventListener("keydown", (e) => { if (e.key === "Enter") joinBtn.click(); });
+
+    // Page visibility hint (not critical)
+    document.addEventListener("visibilitychange", () => {
+      statusDot.textContent = document.hidden ? "Background" : "Connected";
+    });
+  </script>
+
+  <!-- Optional: tiny footer with a friendly note -->
+  <div style="position:fixed;bottom:10px;left:50%;transform:translateX(-50%);font-size:12px;color:#9aa3d7;transform:translateX(-50%);">
+    Built for fun — share your Session ID with a friend and take turns!
+  </div>
+</body>
+</html>
