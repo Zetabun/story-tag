@@ -367,7 +367,7 @@
 
           const meP=presenceOf(players[myUid]?.lastActive); const peP=presenceOf(players[peerId]?.lastActive);
           youPresence.className=`presence ${meP.cls}`; youPresence.textContent=meP.label;
-          peerPresence.className=`presence ${peP.cls}`; peerPresence.textContent=peP.label;\
+          peerPresence.className=`presence ${peP.cls}`; peerPresence.textContent=peP.label;
           // Merge colour: prefer server; only fall back to local if server missing
           const mergedPlayers=JSON.parse(JSON.stringify(players||{}));
           const serverColour = players?.[myUid]?.colour || null;
