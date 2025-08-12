@@ -289,7 +289,7 @@
       submitBtn.disabled=!mine; wordInput.disabled=!mine;
       // Require colour selection before first word (if not locked yet)
       const hasLocked = !!(players?.[myUid]?.colour);
-      const hasPending = !!(typeof savedPendingColour !== 'undefined' ? savedPendingColour : loadPendingColour(derivedKey, clientId));
+      const hasPending = !!(typeof (PENDING_COLOUR_CACHE ?? loadPendingColour(derivedKey, clientId)) !== 'undefined' ? (PENDING_COLOUR_CACHE ?? loadPendingColour(derivedKey, clientId)) : loadPendingColour(derivedKey, clientId));
       if(mine && !hasLocked && !hasPending){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.innerHTML="Pick a colour to start."; }
       if(mine && !submitBtn.disabled) wordInput.focus();
     }
@@ -324,7 +324,11 @@
           if(mode==='join'&&!pwd&&remembered[sid]) derivedKey=remembered[sid];
           else { if(!pwd){ if(!auto) joinStatus.innerHTML='<span class="err">Enter a password</span>'; return; }
                  derivedKey=await sha256Base64Url(`${sid}:${pwd}`);
-        const savedPendingColour = loadPendingColour(derivedKey, clientId); }
+        const (PENDING_COLOUR_CACHE ?? loadPendingColour(derivedKey, clientId)) = loadPendingColour(derivedKey, clientId);
+        PENDING_COLOUR_CACHE = (PENDING_COLOUR_CACHE ?? loadPendingColour(derivedKey, clientId)) || null;
+        const (PENDING_COLOUR_CACHE ?? loadPendingColour(derivedKey, clientId)) = loadPendingColour(derivedKey, clientId);
+        PENDING_COLOUR_CACHE = (PENDING_COLOUR_CACHE ?? loadPendingColour(derivedKey, clientId)) || null;
+        PENDING_COLOUR_CACHE = (PENDING_COLOUR_CACHE ?? loadPendingColour(derivedKey, clientId)) || null; }
         }
 
         const sesRef=ref(db,`sessions/${derivedKey}`); const snap=await get(sesRef);
@@ -375,14 +379,14 @@
         auth.style.display="none"; game.style.display="block";
         sessionLabel.textContent=sid; youLabel.textContent=myName;
 
-        // Set local/UI colour: prefer server locked colour, else pending local, else picker default
+        // Set local/UI colour: prefer server-locked > pending > picker default
         const lockedFromServer = (players[myUid]?.colour) || null;
-        const myColourNow = lockedFromServer || savedPendingColour || colourPicker.value || "#58a6ff";
+        const myColourNow = lockedFromServer || (PENDING_COLOUR_CACHE ?? loadPendingColour(derivedKey, clientId)) || colourPicker.value || "#58a6ff";
         colourPicker.value = myColourNow;
-        // Disable picker if already locked
-        if (lockedFromServer) { colourPicker.disabled = true; } else { colourPicker.disabled = false; }
         localColour[myUid] = myColourNow;
         setMyColourUI(myColourNow);
+        // Disable picker if already locked
+        if (lockedFromServer) { colourPicker.disabled = true; } else { colourPicker.disabled = false; }
 
         // Subscribe to session
         if(window._unsub) window._unsub();
@@ -409,7 +413,7 @@
 
           // Sync picker & dots (server-locked > pending > local > picker)
           const locked = (players?.[myUid]?.colour) || null;
-          const pending = (typeof savedPendingColour !== 'undefined' ? savedPendingColour : loadPendingColour(derivedKey, clientId));
+          const pending = (typeof (PENDING_COLOUR_CACHE ?? loadPendingColour(derivedKey, clientId)) !== 'undefined' ? (PENDING_COLOUR_CACHE ?? loadPendingColour(derivedKey, clientId)) : loadPendingColour(derivedKey, clientId));
           const myEffectiveColour = locked || pending || localColour[myUid] || colourPicker.value || "#58a6ff";
           if (myEffectiveColour && colourPicker.value.toLowerCase() !== myEffectiveColour.toLowerCase()) {
             colourPicker.value = myEffectiveColour;
@@ -462,12 +466,14 @@
         const hex=colourPicker.value;
         // If already locked, ignore further changes and snap back
         if(players[myUid]?.colour){
-          colourPicker.value = players[myUid].colour;
-          setMyColourUI(players[myUid].colour);
-          setDotColour(youDot, players[myUid].colour, true);
+          const lockedHex = players[myUid].colour;
+          colourPicker.value = lockedHex;
+          setMyColourUI(lockedHex);
+          setDotColour(youDot, lockedHex, true);
           return;
         }
-        // Save pending locally, update UI instantly; do NOT write to DB yet
+        // Save pending locally, cache it, update UI; do NOT write to DB yet
+        PENDING_COLOUR_CACHE = hex;
         localColour[myUid]=hex; savePendingColour(last.derivedKey, clientId, hex);
         setMyColourUI(hex); setDotColour(youDot,hex,true);
       }catch(e){ console.error(e); }
