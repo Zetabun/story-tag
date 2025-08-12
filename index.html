@@ -222,22 +222,6 @@
     const clientId = getClientId();
 
     /* ========= Local storage ========= */
-    // Per-session pending colour (not yet locked) keyed by derivedKey|clientId
-    const COL_KEY="storytag_session_pending_colour_v1";
-    const loadColourMap=()=>{ try{return JSON.parse(localStorage.getItem(COL_KEY)||"{}");}catch{return{};} };
-    const saveColourMap=m=>localStorage.setItem(COL_KEY, JSON.stringify(m));
-    function savePendingColour(derivedKey, clientId, hex){
-      if(!derivedKey||!clientId||!hex) return;
-      const map = loadColourMap();
-      map[`${derivedKey}|${clientId}`] = String(hex);
-      saveColourMap(map);
-    }
-    function loadPendingColour(derivedKey, clientId){
-      try{
-        const map = loadColourMap();
-        return map[`${derivedKey}|${clientId}`] || null;
-      }catch{return null;}
-    }
     const LS_KEY="storytag_state_v1", REM_KEY="storytag_remembered_sessions_v1", LAST_KEY="storytag_last_session_v1";
     const saveLocal=s=>localStorage.setItem(LS_KEY,JSON.stringify(s));
     const loadLocal=()=>{ try{return JSON.parse(localStorage.getItem(LS_KEY)||"{}");}catch{return{};} };
@@ -286,12 +270,7 @@
       if(mine) turnBanner.innerHTML=`It’s <span class="turn">your</span> turn to write`;
       else if(their) turnBanner.innerHTML=`<span class="nameTag">${escapeHtml(their?.name||"Partner")}</span>’s turn to write`;
       else turnBanner.textContent="Waiting for partner…";
-      submitBtn.disabled=!mine; wordInput.disabled=!mine;
-      // Require colour selection before first word (if not locked yet)
-      const hasLocked = !!(players?.[myUid]?.colour);
-      const hasPending = !!(typeof (PENDING_COLOUR_CACHE ?? loadPendingColour(derivedKey, clientId)) !== 'undefined' ? (PENDING_COLOUR_CACHE ?? loadPendingColour(derivedKey, clientId)) : loadPendingColour(derivedKey, clientId));
-      if(mine && !hasLocked && !hasPending){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.innerHTML="Pick a colour to start."; }
-      if(mine && !submitBtn.disabled) wordInput.focus();
+      submitBtn.disabled=!mine; wordInput.disabled=!mine; if(mine) wordInput.focus();
     }
 
     // Turn sound
@@ -323,12 +302,7 @@
         if(!derivedKey){
           if(mode==='join'&&!pwd&&remembered[sid]) derivedKey=remembered[sid];
           else { if(!pwd){ if(!auto) joinStatus.innerHTML='<span class="err">Enter a password</span>'; return; }
-                 derivedKey=await sha256Base64Url(`${sid}:${pwd}`);
-        const (PENDING_COLOUR_CACHE ?? loadPendingColour(derivedKey, clientId)) = loadPendingColour(derivedKey, clientId);
-        PENDING_COLOUR_CACHE = (PENDING_COLOUR_CACHE ?? loadPendingColour(derivedKey, clientId)) || null;
-        const (PENDING_COLOUR_CACHE ?? loadPendingColour(derivedKey, clientId)) = loadPendingColour(derivedKey, clientId);
-        PENDING_COLOUR_CACHE = (PENDING_COLOUR_CACHE ?? loadPendingColour(derivedKey, clientId)) || null;
-        PENDING_COLOUR_CACHE = (PENDING_COLOUR_CACHE ?? loadPendingColour(derivedKey, clientId)) || null; }
+                 derivedKey=await sha256Base64Url(`${sid}:${pwd}`); }
         }
 
         const sesRef=ref(db,`sessions/${derivedKey}`); const snap=await get(sesRef);
@@ -366,7 +340,7 @@
         if (seatExists) {
           await update(myPlayerRef, { uid:myUid, clientId, name:myName, lastActive:Date.now() });
         } else {
-          await set(myPlayerRef, { uid:myUid, clientId, name:myName, joinedAt:serverTimestamp(), lastActive:Date.now()  });
+          await set(myPlayerRef, { uid:myUid, clientId, name:myName, colour:defaultColour, joinedAt:serverTimestamp(), lastActive:Date.now() });
         }
         onDisconnect(myPlayerRef).remove();
         window.addEventListener("unload",()=>{ try{ navigator.sendBeacon && remove(myPlayerRef); }catch{} });
@@ -379,14 +353,11 @@
         auth.style.display="none"; game.style.display="block";
         sessionLabel.textContent=sid; youLabel.textContent=myName;
 
-        // Set local/UI colour: prefer server-locked > pending > picker default
-        const lockedFromServer = (players[myUid]?.colour) || null;
-        const myColourNow = lockedFromServer || (PENDING_COLOUR_CACHE ?? loadPendingColour(derivedKey, clientId)) || colourPicker.value || "#58a6ff";
+        // Set local/UI colour from server if present, else default
+        const myColourNow = (players[myUid]?.colour) || defaultColour;
         colourPicker.value = myColourNow;
         localColour[myUid] = myColourNow;
         setMyColourUI(myColourNow);
-        // Disable picker if already locked
-        if (lockedFromServer) { colourPicker.disabled = true; } else { colourPicker.disabled = false; }
 
         // Subscribe to session
         if(window._unsub) window._unsub();
@@ -398,33 +369,30 @@
           youPresence.className=`presence ${meP.cls}`; youPresence.textContent=meP.label;
           peerPresence.className=`presence ${peP.cls}`; peerPresence.textContent=peP.label;
 
-          // Merge colour: prefer server; only fall back to local if server missing
+          // Merge local colour to avoid flicker
           const mergedPlayers=JSON.parse(JSON.stringify(players||{}));
-          const serverColour = players?.[myUid]?.colour || null;
-          if (serverColour) {
-            // Keep server truth and sync local cache
-            localColour[myUid] = serverColour;
-          } else if (localColour[myUid]) {
-            // Use local only when server has nothing yet
-            mergedPlayers[myUid] = mergedPlayers[myUid] || {};
-            mergedPlayers[myUid].colour = localColour[myUid];
-          }
+          if(localColour[myUid]){ mergedPlayers[myUid]=mergedPlayers[myUid]||{}; mergedPlayers[myUid].colour=localColour[myUid]; }
           peerLabel.textContent=peerId?(players[peerId]?.name||"Partner"):"(none)";
 
-          // Sync picker & dots (server-locked > pending > local > picker)
-          const locked = (players?.[myUid]?.colour) || null;
-          const pending = (typeof (PENDING_COLOUR_CACHE ?? loadPendingColour(derivedKey, clientId)) !== 'undefined' ? (PENDING_COLOUR_CACHE ?? loadPendingColour(derivedKey, clientId)) : loadPendingColour(derivedKey, clientId));
-          const myEffectiveColour = locked || pending || localColour[myUid] || colourPicker.value || "#58a6ff";
-          if (myEffectiveColour && colourPicker.value.toLowerCase() !== myEffectiveColour.toLowerCase()) {
-            colourPicker.value = myEffectiveColour;
+          // Sync picker & dots to server colour
+          const myColourFromServer = mergedPlayers[myUid]?.colour;
+          if (myColourFromServer && colourPicker.value.toLowerCase() !== myColourFromServer.toLowerCase()) {
+            colourPicker.value = myColourFromServer;
           }
-          setMyColourUI(myEffectiveColour);
-          setDotColour(youDot, myEffectiveColour, !!mergedPlayers[myUid]);
-          colourPicker.disabled = !!(players?.[myUid]?.colour);
+          setMyColourUI(myColourFromServer);
+          setDotColour(youDot, myColourFromServer, !!mergedPlayers[myUid]);
           setDotColour(peerDot, mergedPlayers[peerId]?.colour, !!mergedPlayers[peerId]);
 
           setUIConnected(ids.length>0);
           renderStory(words,mergedPlayers);
+          // Auto-pass to peer after my first word if needed
+          const last = words[words.length-1];
+          const shouldAutoPass = (Object.keys(players).length >= 2) && last && (last.by === myUid) && (!cturn || cturn === myUid) && peerId;
+          if (shouldAutoPass) {
+            cturn = peerId;
+            update(sesRef,{ currentTurnUid: peerId });
+          }
+        
 
           if(cturn && !players[cturn] && ids.length>0){ const newTurn=ids[0]; update(sesRef,{currentTurnUid:newTurn}); cturn=newTurn; }
           if(ids.length<2 && words.length>0){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
@@ -472,10 +440,10 @@
           setDotColour(youDot, lockedHex, true);
           return;
         }
-        // Save pending locally, cache it, update UI; do NOT write to DB yet
-        PENDING_COLOUR_CACHE = hex;
-        localColour[myUid]=hex; savePendingColour(last.derivedKey, clientId, hex);
-        setMyColourUI(hex); setDotColour(youDot,hex,true);
+        // Save pending locally and update UI; do NOT write to DB yet
+        localColour[myUid]=hex;
+        setMyColourUI(hex);
+        setDotColour(youDot,hex,true);
       }catch(e){ console.error(e); }
     }
     colourPicker.addEventListener("input",handleColourChange);
@@ -485,55 +453,40 @@
 /* ========= Submit word ========= */
     submitBtn.onclick=async ()=>{
       errorBox.textContent="";
-      const raw = (wordInput.value||"").trim();
-      if(!raw) return;
-      const word = raw;
+      let word=(wordInput.value||"").trim(); if(!word) return;
 
-      const last = loadLastSession();
-      if(!last){ errorBox.textContent="No active session."; return; }
-
-      const sesRef = ref(db,`sessions/${last.derivedKey}`);
-      const sesSnap = await get(sesRef);
-      const ses = sesSnap.val();
+      const last=loadLastSession(); if(!last){ errorBox.textContent="No active session."; return; }
+      const sesRef=ref(db,`sessions/${last.derivedKey}`); const sesSnap=await get(sesRef); const ses=sesSnap.val();
       if(!ses){ errorBox.textContent="Session not found."; return; }
 
-      const players = ses.players || {};
-      const myUid = Object.keys(players).find(u => players[u]?.clientId === clientId);
+      const players=ses.players||{}; const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId);
       if(!myUid){ errorBox.textContent="Rejoin required."; return; }
-
-      if(ses.currentTurnUid !== myUid){ errorBox.textContent="Not your turn yet."; wordInput.value=""; return; }
+      if(ses.currentTurnUid!==myUid){ errorBox.textContent="Not your turn yet."; wordInput.value=""; return; }
       if(!WORD_RX.test(word)){ errorBox.textContent="Invalid word. Use letters, apostrophes, hyphens, optional .,!? at end."; return; }
 
       // Colour: require a choice before first submit; lock on first submit
       const locked = players[myUid]?.colour || null;
-      const pending = loadPendingColour(last.derivedKey, clientId);
+      const pending = colourPicker.value && colourPicker.value.trim() ? colourPicker.value : null;
       if(!locked && !pending){ errorBox.textContent="Pick a colour first."; return; }
       const myColourNow = locked || pending || "#58a6ff";
 
-      const words = Array.isArray(ses.words) ? ses.words : [];
-      const peerUid = Object.keys(players).find(k => k !== myUid);
+      const words=Array.isArray(ses.words)?ses.words:[]; const peerUid=Object.keys(players).find(k=>k!==myUid);
 
       try{
-        await update(sesRef, {
-          words: [...words, { w: titleCaseFirstWordIfNeeded(words.length, word), by: myUid, c: myColourNow, t: Date.now() }],
+        await update(sesRef,{
+          words:[...words,{ w:titleCaseFirstWordIfNeeded(words.length,word), by:myUid, c:myColourNow, t:Date.now() }],
           currentTurnUid: (peerUid || null),
           ...(locked ? {} : { [`players/${myUid}/colour`]: myColourNow })
         });
-        await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`), { lastActive: Date.now() });
+        await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`),{lastActive:Date.now()});
 
+        // Disable picker if we just locked
         if(!locked){ colourPicker.disabled = true; }
-        wordInput.value="";
-        if(!peerUid){
-          submitBtn.disabled=true;
-          wordInput.disabled=true;
-          turnBanner.textContent="Waiting for partner…";
-        }
-      }catch(e){
-        console.error(e);
-        errorBox.textContent="Submit failed — try again.";
-      }
-    };
 
+        wordInput.value="";
+        if(!peerUid){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
+      }catch(e){ console.error(e); errorBox.textContent="Submit failed — try again."; }
+    };
 /* ========= Utilities ========= */
     copyBtn.onclick=async()=>{ const txt=[...document.querySelectorAll("#storyBox .word")].map(el=>el.textContent).join(" "); await navigator.clipboard.writeText(txt); copyBtn.textContent="Copied!"; setTimeout(()=>copyBtn.textContent="Copy story",1200); };
     downloadBtn.onclick=()=>{ const last=loadLastSession(); const fileSid=last?.sessionId||"session"; const txt=[...document.querySelectorAll("#storyBox .word")].map(el=>el.textContent).join(" "); const blob=new Blob([txt],{type:"text/plain"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`story-${fileSid}.txt`; a.click(); URL.revokeObjectURL(a.href); };
