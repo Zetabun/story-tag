@@ -249,14 +249,13 @@
       return btoa(bin).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"");
     }
 
-    /* ========= Colour persistence ========= */
-    const localColour={}; // uid -> hex
+    /* ========= Colour persistence: handled via localStorage pendingKey now ========= */
 
     function renderStory(words, players){
       storyBox.innerHTML=""; if(!words.length){ storyBox.textContent="(No words yet—be the first to write!)"; wordCount.textContent="0"; return; }
       for(const w of words){
         const el=document.createElement("span"); el.className="word";
-        const col=w.c || (players?.[w.by]?.colour) || localColour[w.by] || "#c6cdff";
+        const col=w.c || (players?.[w.by]?.colour) ||  "#c6cdff";
         el.style.color=col; el.textContent=w.w; storyBox.appendChild(el);
       }
       wordCount.textContent=String(words.length);
@@ -332,14 +331,14 @@
         }
 
         // --- Create/update player seat (DON'T overwrite colour if seat already exists) ---
-        // (colour is assigned on first submit only)
+        const defaultColour = `#${Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,"0")}`;
         const myPlayerRef=ref(db,`sessions/${derivedKey}/players/${myUid}`);
         const seatExists = !!players[myUid];
 
         if (seatExists) {
           await update(myPlayerRef, { uid:myUid, clientId, name:myName, lastActive:Date.now() });
         } else {
-          await set(myPlayerRef, { uid:myUid, clientId, name:myName, colour:defaultColour, joinedAt:serverTimestamp(), lastActive:Date.now() });
+          await set(myPlayerRef, { uid:myUid, clientId, name:myName, joinedAt:serverTimestamp(), lastActive:Date.now() });
         }
         onDisconnect(myPlayerRef).remove();
         window.addEventListener("unload",()=>{ try{ navigator.sendBeacon && remove(myPlayerRef); }catch{} });
@@ -352,10 +351,11 @@
         auth.style.display="none"; game.style.display="block";
         sessionLabel.textContent=sid; youLabel.textContent=myName;
 
-        // Set local/UI colour from server if present, else default
-        const myColourNow = (players[myUid]?.colour) || defaultColour;
-        colourPicker.value = myColourNow;
-        localColour[myUid] = myColourNow;
+        // Decide my colour: server-locked, or pending from localStorage, or fresh random
+        const pendingKey = `storytag_pending_colour_${derivedKey}_${clientId}`;
+        const pendingLocal = localStorage.getItem(pendingKey);
+        let myColourNow = (players[myUid]?.colour) || pendingLocal || defaultColour;
+        if (!players[myUid]?.colour && !pendingLocal) { try { localStorage.setItem(pendingKey, myColourNow); } catch {} }
         setMyColourUI(myColourNow);
 
         // Subscribe to session
@@ -368,15 +368,16 @@
           youPresence.className=`presence ${meP.cls}`; youPresence.textContent=meP.label;
           peerPresence.className=`presence ${peP.cls}`; peerPresence.textContent=peP.label;
 
-          // Merge local colour to avoid flicker
           const mergedPlayers=JSON.parse(JSON.stringify(players||{}));
-          if(localColour[myUid]){ mergedPlayers[myUid]=mergedPlayers[myUid]||{}; mergedPlayers[myUid].colour=localColour[myUid]; }
+          
           peerLabel.textContent=peerId?(players[peerId]?.name||"Partner"):"(none)";
 
-          // Update swatch and dot to server colour
+          // Update swatch and dot to server colour (or pending while unlocked)
           const myColourFromServer = mergedPlayers[myUid]?.colour;
-          setMyColourUI(myColourFromServer);
-          setDotColour(youDot, myColourFromServer, !!mergedPlayers[myUid]);
+          const pendingKey = `storytag_pending_colour_${derivedKey}_${clientId}`;
+          const pendingLocal = (!myColourFromServer) ? (localStorage.getItem(pendingKey) || null) : null;
+          setMyColourUI(myColourFromServer || pendingLocal);
+          setDotColour(youDot, myColourFromServer || pendingLocal, !!mergedPlayers[myUid]);
           setDotColour(peerDot, mergedPlayers[peerId]?.colour, !!mergedPlayers[peerId]);
 
           setUIConnected(ids.length>0);
@@ -398,7 +399,6 @@
           if(wasMyTurn===false && isMyTurn) playTurnSound(); wasMyTurn=isMyTurn;
 
           saveLocal({sessionId:sid,myName});
-          ...(players[myUid]?.colour ? {} : { [`players/${myUid}/colour`]: myColourNow })
         });
 
         if(!auto){ wordInput.focus(); joinStatus.innerHTML='<span class="ok">Ready!</span>'; }
@@ -434,11 +434,10 @@
       if(ses.currentTurnUid!==myUid){ errorBox.textContent="Not your turn yet."; wordInput.value=""; return; }
       if(!WORD_RX.test(word)){ errorBox.textContent="Invalid word. Use letters, apostrophes, hyphens, optional .,!? at end."; return; }
 
-      // Colour: require a choice before first submit; lock on first submit
-      const locked = players[myUid]?.colour || null;
-      const pending = colourPicker.value && colourPicker.value.trim() ? colourPicker.value : null;
-      if(!locked && !pending){ errorBox.textContent="Pick a colour first."; return; }
-      const myColourNow = locked || pending || "#58a6ff";
+      // Colour: use server-locked colour, else pending from localStorage, else fallback
+      const pendingKey = `${"storytag_pending_colour_"}${last.derivedKey}_${clientId}`;
+      const pendingLocal = localStorage.getItem(pendingKey);
+      const myColourNow = players[myUid]?.colour || pendingLocal || "#58a6ff";
 
       const words=Array.isArray(ses.words)?ses.words:[]; const peerUid=Object.keys(players).find(k=>k!==myUid);
 
@@ -449,6 +448,7 @@
           ...(players[myUid]?.colour ? {} : { [`players/${myUid}/colour`]: myColourNow })
         });
         await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`),{lastActive:Date.now()});
+        try { if (!players[myUid]?.colour) localStorage.removeItem(pendingKey); } catch {}
 
 
         wordInput.value="";
