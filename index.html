@@ -23,6 +23,7 @@
     .hint { font-size:13px; color:#9aa3d7; }
     .ok { color:#69f0ae; }
     .err { color:#ff6b6b; }
+    .warn { color:#ffd166; }
     .story { background:#0c0f22; border:1px solid #2a2f4a; border-radius:12px; padding:14px; min-height:100px; }
     .toolbar { display:flex; gap:8px; flex-wrap:wrap; }
     .pill { padding:6px 10px; border-radius:999px; background:#1c2142; border:1px solid #2a2f4a; color:#c6cdff; font-size:12px; display:flex; align-items:center; gap:8px; }
@@ -34,25 +35,19 @@
     .divider { height:1px; background:#2a2f4a; margin:14px 0; }
     .tag { display:inline-flex; align-items:center; gap:6px; }
     .dot { width:8px; height:8px; border-radius:50%; background:#666; box-shadow: 0 0 0 1px rgba(255,255,255,.12) inset; }
-    /* coloured words */
     .word { display:inline; }
     .word + .word::before { content: " "; }
-    /* colour swatch + input overlay */
     .colourWrap { position: relative; display: inline-block; }
-    .swatch{
-      width:28px; height:14px; border-radius:7px;
-      border:1px solid #2a2f4a; background:#58a6ff;
-      display:inline-block; vertical-align:middle;
-      box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
-    }
+    .swatch{ width:28px; height:14px; border-radius:7px; border:1px solid #2a2f4a; background:#58a6ff; display:inline-block; vertical-align:middle; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
     .swatchInput{ position:absolute; inset:0; opacity:0; cursor:pointer; }
+    a.link { color:#a6b3ff; text-decoration:none; cursor:pointer; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
       <h1>Story Tag</h1>
-      <p class="sub">Enter a Session ID and password to create a private room. Share both with your friend to join the same session.</p>
+      <p class="sub">Create a private session with an ID + password, then share both with a friend. Take turns adding one word to build a story.</p>
 
       <div id="auth" class="grid">
         <div>
@@ -62,14 +57,19 @@
         <div>
           <label for="sessionId">Session ID</label>
           <input id="sessionId" type="text" maxlength="32" placeholder="e.g., 343w4 (friendly name)" />
-          <div class="small hint">This is just a friendly label. Privacy comes from the password-derived key.</div>
+          <div class="small hint">This is a friendly label. Privacy comes from the password-derived key.</div>
         </div>
         <div>
           <label for="password">Password</label>
-          <input id="password" type="password" maxlength="64" placeholder="Required (you and your friend must use the same one)" />
+          <input id="password" type="password" maxlength="64" placeholder="Required once unless remembered" />
+          <div class="small hint" id="savedHint"></div>
         </div>
         <div class="row">
-          <button id="joinBtn">Join Session</button>
+          <label class="small"><input id="rememberChk" type="checkbox" /> Remember this session on this device</label>
+        </div>
+        <div class="row">
+          <button id="createBtn">Create session</button>
+          <button id="joinBtn">Join session</button>
           <div id="joinStatus" class="small"></div>
         </div>
       </div>
@@ -78,16 +78,10 @@
         <div class="row">
           <div class="pill">Session: <span id="sessionLabel"></span></div>
           <div class="pill">You:
-            <span class="tag">
-              <span id="youDot" class="dot"></span>
-              <span id="youLabel" class="nameTag"></span>
-            </span>
+            <span class="tag"><span id="youDot" class="dot"></span><span id="youLabel" class="nameTag"></span></span>
           </div>
           <div class="pill">Partner:
-            <span class="tag">
-              <span id="peerDot" class="dot"></span>
-              <span id="peerLabel"></span>
-            </span>
+            <span class="tag"><span id="peerDot" class="dot"></span><span id="peerLabel"></span></span>
           </div>
           <div class="pill">Words: <span id="wordCount">0</span></div>
           <div class="pill">Status: <span id="statusDot">Waiting…</span></div>
@@ -131,7 +125,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
       getDatabase, ref, get, set, update, onValue, serverTimestamp,
-      onDisconnect, runTransaction, remove
+      onDisconnect, remove
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
     const firebaseConfig = {
@@ -150,9 +144,10 @@
 
     // Elements
     const $ = id => document.getElementById(id);
-    const joinBtn = $("joinBtn"), joinStatus = $("joinStatus"),
+    const createBtn = $("createBtn"), joinBtn = $("joinBtn"), joinStatus = $("joinStatus"),
           auth = $("auth"), game = $("game"),
           nameInput = $("name"), sessionInput = $("sessionId"), passwordInput = $("password"),
+          rememberChk = $("rememberChk"), savedHint = $("savedHint"),
           sessionLabel = $("sessionLabel"),
           youLabel = $("youLabel"), peerLabel = $("peerLabel"),
           youDot = $("youDot"), peerDot = $("peerDot"),
@@ -178,10 +173,27 @@
     }
     const clientId = getClientId();
 
-    // Local backup (for convenience — NOT storing password)
+    // Local backups & remembered sessions (no passwords stored)
     const LS_KEY = "storytag_state_v1";
     function saveLocal(state) { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
     function loadLocal() { try { return JSON.parse(localStorage.getItem(LS_KEY) || "{}"); } catch { return {}; } }
+
+    const REM_KEY = "storytag_remembered_sessions_v1";
+    function loadRememberMap(){ try { return JSON.parse(localStorage.getItem(REM_KEY) || "{}"); } catch { return {}; } }
+    function saveRememberMap(map){ localStorage.setItem(REM_KEY, JSON.stringify(map)); }
+    function setSavedHintText(sid){
+      const map = loadRememberMap();
+      if (sid && map[sid]) {
+        savedHint.innerHTML = `Saved on this device — password optional. <a id="forgetLink" class="link">Forget</a>`;
+        setTimeout(() => {
+          const forget = document.getElementById("forgetLink");
+          if (forget) forget.onclick = () => {
+            const m = loadRememberMap(); delete m[sid]; saveRememberMap(m);
+            savedHint.textContent = "Removed saved key.";
+          };
+        }, 0);
+      } else savedHint.textContent = "";
+    }
 
     // Word regex (letters, apostrophes, hyphens, optional trailing .,!?)
     const WORD_RX = /^[A-Za-z]+(?:['-][A-Za-z]+)*(?:[.,!?])?$/;
@@ -190,36 +202,26 @@
     function titleCaseFirstWordIfNeeded(i, word) { return (i === 0 && word.length) ? word[0].toUpperCase() + word.slice(1) : word; }
     function setUIConnected(connected) { statusDot.textContent = connected ? "Connected" : "Offline"; }
     function escapeHtml(s) { return (s || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
-    function setDotColour(el, colour, present) {
-      el.style.background = present ? (colour || "#666") : "#666";
-      el.style.boxShadow = "0 0 0 1px rgba(255,255,255,.12) inset";
-    }
-    function setMyColourUI(hex){
-      if (!hex) return;
-      colourSwatch.style.background = hex;
-      youDot.style.background = hex;
-    }
+    function setDotColour(el, colour, present) { el.style.background = present ? (colour || "#666") : "#666"; el.style.boxShadow = "0 0 0 1px rgba(255,255,255,.12) inset"; }
+    function setMyColourUI(hex){ if (!hex) return; colourSwatch.style.background = hex; youDot.style.background = hex; }
 
     // Crypto helpers: SHA-256 + base64url
     async function sha256Base64Url(input) {
       const enc = new TextEncoder();
       const hash = await crypto.subtle.digest("SHA-256", enc.encode(input));
       const bytes = new Uint8Array(hash);
-      let bin = "";
-      for (let b of bytes) bin += String.fromCharCode(b);
+      let bin = ""; for (let b of bytes) bin += String.fromCharCode(b);
       return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
     }
 
-    // Render story as coloured spans
+    // Render story
     function renderStory(words, players) {
       storyBox.innerHTML = "";
       if (!words.length) { storyBox.textContent = "(No words yet—be the first to write!)"; wordCount.textContent = "0"; return; }
       for (const w of words) {
-        const span = document.createElement("span");
-        span.className = "word";
+        const span = document.createElement("span"); span.className = "word";
         span.style.color = players?.[w.by]?.colour || "#c6cdff";
-        span.textContent = w.w;
-        storyBox.appendChild(span);
+        span.textContent = w.w; storyBox.appendChild(span);
       }
       wordCount.textContent = String(words.length);
     }
@@ -229,16 +231,10 @@
       const mine = currentTurnUid === myUid;
       const theirUid = Object.keys(players).find(k => k !== myUid);
       const their = theirUid ? players[theirUid] : null;
-      if (mine) {
-        turnBanner.innerHTML = `It’s <span class="turn">your</span> turn to write`;
-      } else if (their) {
-        const safeName = escapeHtml(their?.name || "Partner");
-        turnBanner.innerHTML = `<span class="nameTag">${safeName}</span>’s turn to write`;
-      } else {
-        turnBanner.textContent = "Waiting for partner…";
-      }
-      submitBtn.disabled = !mine; wordInput.disabled = !mine;
-      if (mine) wordInput.focus();
+      if (mine) { turnBanner.innerHTML = `It’s <span class="turn">your</span> turn to write`; }
+      else if (their) { const safeName = escapeHtml(their?.name || "Partner"); turnBanner.innerHTML = `<span class="nameTag">${safeName}</span>’s turn to write`; }
+      else { turnBanner.textContent = "Waiting for partner…"; }
+      submitBtn.disabled = !mine; wordInput.disabled = !mine; if (mine) wordInput.focus();
     }
 
     // Sound ping
@@ -246,34 +242,22 @@
     function playTurnSound() {
       if (!canPlaySound) return;
       try {
-        ensureAudio();
-        const now = audioCtx.currentTime;
-        const g = audioCtx.createGain();
-        g.gain.setValueAtTime(0.0001, now);
-        g.gain.exponentialRampToValueAtTime(0.12, now + 0.01);
-        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
-        g.connect(audioCtx.destination);
-        const o = audioCtx.createOscillator();
-        o.type = "sine";
-        o.frequency.setValueAtTime(660, now);
-        o.frequency.linearRampToValueAtTime(880, now + 0.2);
-        o.connect(g);
-        o.start(now);
-        o.stop(now + 0.35);
+        ensureAudio(); const now = audioCtx.currentTime;
+        const g = audioCtx.createGain(); g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(0.12, now + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, now + 0.35); g.connect(audioCtx.destination);
+        const o = audioCtx.createOscillator(); o.type = "sine"; o.frequency.setValueAtTime(660, now); o.frequency.linearRampToValueAtTime(880, now + 0.2); o.connect(g); o.start(now); o.stop(now + 0.35);
       } catch {}
     }
 
-    // Prefill (name + friendly session only; password is never stored)
+    // Prefill & hint
     (function tryResume() {
       const saved = loadLocal();
-      if (saved.sessionId && saved.myName) {
-        nameInput.value = saved.myName;
-        sessionInput.value = saved.sessionId;
-      }
+      if (saved.sessionId && saved.myName) { nameInput.value = saved.myName; sessionInput.value = saved.sessionId; }
+      setSavedHintText(saved.sessionId || "");
     })();
+    sessionInput.addEventListener("input", () => setSavedHintText(sessionInput.value.trim()));
 
-    // Join
-    joinBtn.onclick = async () => {
+    // ---------- Core enter function (mode: 'create' | 'join') ----------
+    async function enterSession(mode) {
       canPlaySound = true;
       errorBox.textContent = "";
       const name = nameInput.value.trim();
@@ -282,22 +266,41 @@
 
       if (!name) { joinStatus.innerHTML = '<span class="err">Enter your name</span>'; return; }
       if (!sid)  { joinStatus.innerHTML = '<span class="err">Enter a session ID</span>'; return; }
-      if (!pwd)  { joinStatus.innerHTML = '<span class="err">Enter a password</span>'; return; }
 
-      joinBtn.disabled = true; joinStatus.textContent = "Joining…";
+      joinBtn.disabled = true; createBtn.disabled = true;
+      joinStatus.textContent = mode === 'create' ? "Creating…" : "Joining…";
 
       try {
-        // Derive unguessable DB key from (sessionId + ":" + password)
+        // derive or load key
+        const remembered = loadRememberMap();
+        if (mode === 'join' && !pwd && remembered[sid]) {
+          derivedKey = remembered[sid];
+        } else {
+          if (!pwd) { joinStatus.innerHTML = '<span class="err">Enter a password</span>'; joinBtn.disabled = false; createBtn.disabled = false; return; }
+          derivedKey = await sha256Base64Url(`${sid}:${pwd}`);
+        }
+
         sessionId = sid;
-        derivedKey = await sha256Base64Url(`${sid}:${pwd}`);
 
         const sesRef = ref(db, `sessions/${derivedKey}`);
         const snap = await get(sesRef);
+        const exists = snap.exists();
         const existing = snap.val() || {};
         const players = existing.players || {};
 
-        // Reuse seat if a player with this clientId exists
-        let reuseUid = Object.keys(players).find(uid => players[uid]?.clientId === clientId);
+        if (mode === 'create' && exists) {
+          joinStatus.innerHTML = '<span class="warn">A session with this ID+password already exists. Use Join instead or pick a different combo.</span>';
+          joinBtn.disabled = false; createBtn.disabled = false;
+          return;
+        }
+        if (mode === 'join' && !exists) {
+          joinStatus.innerHTML = '<span class="warn">No session found for that ID+password. Did you mean to Create?</span>';
+          joinBtn.disabled = false; createBtn.disabled = false;
+          return;
+        }
+
+        // Reuse seat if our clientId already exists
+        let reuseUid = Object.keys(players).find(uid => players[uid]?.clientId === getClientId());
         myUid = reuseUid || ("u_" + Math.random().toString(36).slice(2, 10));
         myName = name;
 
@@ -305,24 +308,22 @@
         const seatCount = Object.keys(players).length;
         if (seatCount >= 2 && !reuseUid) {
           joinStatus.innerHTML = '<span class="err">Session is full (2/2)</span>';
-          joinBtn.disabled = false;
-          return;
+          joinBtn.disabled = false; createBtn.disabled = false; return;
         }
 
-        // Same-name disambiguation (only if not reclaiming and joining as second)
+        // Create session doc if needed
+        if (!exists && mode === 'create') {
+          await set(sesRef, { createdAt: serverTimestamp(), friendlyId: sessionId, words: [], currentTurnUid: myUid, players: {} });
+        } else if (exists && !existing.friendlyId) {
+          await update(sesRef, { friendlyId: existing.friendlyId || sessionId });
+        }
+
+        // Same-name disambiguation (only if not reclaiming and we’re the second)
         if (!reuseUid && seatCount === 1) {
           const [otherUid] = Object.keys(players);
           if (players[otherUid]?.name?.trim().toLowerCase() === name.toLowerCase()) {
             myName = `${name} (2)`;
           }
-        }
-
-        // Create session if new
-        if (!snap.exists()) {
-          await set(sesRef, { createdAt: serverTimestamp(), friendlyId: sessionId, words: [], currentTurnUid: myUid, players: {} });
-        } else if (!existing.friendlyId) {
-          // backfill friendlyId once
-          await update(sesRef, { friendlyId: existing.friendlyId || sessionId });
         }
 
         // Default colour
@@ -332,7 +333,7 @@
         const myPlayerRef = ref(db, `sessions/${derivedKey}/players/${myUid}`);
         await set(myPlayerRef, {
           uid: myUid,
-          clientId,                // <-- seat reclaim key
+          clientId: getClientId(),
           name: myName,
           colour: players[myUid]?.colour || defaultColour,
           joinedAt: serverTimestamp()
@@ -341,10 +342,16 @@
         // Free seat on disconnect
         onDisconnect(myPlayerRef).remove();
 
+        // Remember this session locally (store derivedKey, never the password)
+        if (rememberChk.checked) {
+          const map = loadRememberMap(); map[sessionId] = derivedKey; saveRememberMap(map);
+          setSavedHintText(sessionId);
+        }
+
         // UI switch
         auth.style.display = "none";
         game.style.display = "block";
-        sessionLabel.textContent = sessionId; // show friendly ID
+        sessionLabel.textContent = sessionId;
         youLabel.textContent = myName;
         colourPicker.value = players[myUid]?.colour || defaultColour;
         setMyColourUI(colourPicker.value);
@@ -360,8 +367,7 @@
 
           // Peer info
           const peerId = ids.find(k => k !== myUid);
-          peerName = peerId ? (players[peerId]?.name || "Partner") : null;
-          peerLabel.textContent = peerName || "(none)";
+          peerLabel.textContent = peerId ? (players[peerId]?.name || "Partner") : "(none)";
 
           // Dots use chosen colours (grey if seat missing)
           setDotColour(youDot, players[myUid]?.colour, !!players[myUid]);
@@ -403,14 +409,19 @@
         });
 
         wordInput.focus();
-        joinStatus.innerHTML = '<span class="ok">Joined!</span>';
+        joinStatus.innerHTML = '<span class="ok">Ready!</span>';
 
       } catch (e) {
         console.error(e);
-        joinStatus.innerHTML = '<span class="err">Failed to join. Check console & Firebase config.</span>';
-        joinBtn.disabled = false;
+        joinStatus.innerHTML = '<span class="err">Failed. Check console & Firebase config.</span>';
+      } finally {
+        joinBtn.disabled = false; createBtn.disabled = false;
       }
-    };
+    }
+
+    // Buttons
+    createBtn.onclick = () => enterSession('create');
+    joinBtn.onclick = () => enterSession('join');
 
     // Colour picker change -> update swatch + Firebase
     colourPicker.addEventListener("input", async () => {
@@ -436,7 +447,7 @@
       if (ses.currentTurnUid !== myUid) { errorBox.textContent = "Not your turn yet."; wordInput.value = ""; return; }
       if (!WORD_RX.test(word)) { errorBox.textContent = "Invalid word. Use letters, apostrophes, hyphens, optional .,!? at end."; return; }
 
-      const words = ses.words || [];
+      const words = Array.isArray(ses.words) ? ses.words : [];
       const players = ses.players || {};
       const peerUid = Object.keys(players).find(k => k !== myUid);
 
@@ -452,7 +463,7 @@
       } catch (e) { console.error(e); errorBox.textContent = "Failed to add word. Check your connection."; }
     };
 
-    // Copy/Download/Leave
+    // Copy / Download / Leave
     copyBtn.onclick = async () => {
       const text = [...document.querySelectorAll("#storyBox .word")].map(el => el.textContent).join(" ");
       await navigator.clipboard.writeText(text);
@@ -461,17 +472,10 @@
     downloadBtn.onclick = () => {
       const text = [...document.querySelectorAll("#storyBox .word")].map(el => el.textContent).join(" ");
       const blob = new Blob([text], { type: "text/plain" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `story-${sessionId || "session"}.txt`;
-      a.click(); URL.revokeObjectURL(a.href);
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+      a.download = `story-${sessionId || "session"}.txt`; a.click(); URL.revokeObjectURL(a.href);
     };
-    leaveBtn.onclick = async () => {
-      try {
-        if (derivedKey && myUid) await remove(ref(db, `sessions/${derivedKey}/players/${myUid}`));
-      } catch {}
-      location.reload();
-    };
+    leaveBtn.onclick = async () => { try { if (derivedKey && myUid) await remove(ref(db, `sessions/${derivedKey}/players/${myUid}`)); } catch {} location.reload(); };
 
     // Keyboard shortcuts
     wordInput.addEventListener("keydown", (e) => { if (e.key === "Enter") submitBtn.click(); });
