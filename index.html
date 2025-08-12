@@ -475,67 +475,60 @@
     colourPicker.addEventListener("input",handleColourChange);
     colourPicker.addEventListener("change",handleColourChange);
 
-    /* ========= Submit word ========= */
+    
+/* ========= Submit word ========= */
     submitBtn.onclick=async ()=>{
       errorBox.textContent="";
-      let word=(wordInput.value||"").trim(); if(!word) return;
+      const raw = (wordInput.value||"").trim();
+      if(!raw) return;
+      const word = raw;
 
-      const last=loadLastSession(); if(!last){ errorBox.textContent="No active session."; return; }
-      const sesRef=ref(db,`sessions/${last.derivedKey}`); const sesSnap=await get(sesRef); const ses=sesSnap.val();
+      const last = loadLastSession();
+      if(!last){ errorBox.textContent="No active session."; return; }
+
+      const sesRef = ref(db,`sessions/${last.derivedKey}`);
+      const sesSnap = await get(sesRef);
+      const ses = sesSnap.val();
       if(!ses){ errorBox.textContent="Session not found."; return; }
 
-      const players=ses.players||{}; const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId);
+      const players = ses.players || {};
+      const myUid = Object.keys(players).find(u => players[u]?.clientId === clientId);
       if(!myUid){ errorBox.textContent="Rejoin required."; return; }
-      if(ses.currentTurnUid!==myUid){ errorBox.textContent="Not your turn yet."; wordInput.value=""; return; }
+
+      if(ses.currentTurnUid !== myUid){ errorBox.textContent="Not your turn yet."; wordInput.value=""; return; }
       if(!WORD_RX.test(word)){ errorBox.textContent="Invalid word. Use letters, apostrophes, hyphens, optional .,!? at end."; return; }
 
-      const words=Array.isArray(ses.words)?ses.words:[]; const peerUid=Object.keys(players).find(k=>k!==myUid);
-
+      // Colour: require a choice before first submit; lock on first submit
       const locked = players[myUid]?.colour || null;
       const pending = loadPendingColour(last.derivedKey, clientId);
       if(!locked && !pending){ errorBox.textContent="Pick a colour first."; return; }
-
       const myColourNow = locked || pending || "#58a6ff";
 
+      const words = Array.isArray(ses.words) ? ses.words : [];
+      const peerUid = Object.keys(players).find(k => k !== myUid);
+
       try{
-        // Write the new word and next turn; also lock colour on first submit if needed
         await update(sesRef, {
-          words:[...words,{ w:titleCaseFirstWordIfNeeded(words.length,word), by:myUid, c:myColourNow, t:Date.now() }],
+          words: [...words, { w: titleCaseFirstWordIfNeeded(words.length, word), by: myUid, c: myColourNow, t: Date.now() }],
           currentTurnUid: (peerUid || null),
           ...(locked ? {} : { [`players/${myUid}/colour`]: myColourNow })
         });
-        // Update lastActive
-        await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`),{lastActive:Date.now()});
+        await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`), { lastActive: Date.now() });
 
-        // If we just locked, disable colour picker
-        if(!locked){
-          colourPicker.disabled = true;
+        if(!locked){ colourPicker.disabled = true; }
+        wordInput.value="";
+        if(!peerUid){
+          submitBtn.disabled=true;
+          wordInput.disabled=true;
+          turnBanner.textContent="Waiting for partner…";
         }
-
-        wordInput.value="";
-        if(!peerUid){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
-      }catch(e){ console.error(e); errorBox.textContent="Submit failed — try again."; }
-    };
-    const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId);
-      if(!myUid){ errorBox.textContent="Rejoin required."; return; }
-      if(ses.currentTurnUid!==myUid){ errorBox.textContent="Not your turn yet."; wordInput.value=""; return; }
-      if(!WORD_RX.test(word)){ errorBox.textContent="Invalid word. Use letters, apostrophes, hyphens, optional .,!? at end."; return; }
-
-      const words=Array.isArray(ses.words)?ses.words:[]; const peerUid=Object.keys(players).find(k=>k!==myUid);
-      const myColourNow=(players[myUid]?.colour)||localColour[myUid]||colourPicker.value||"#c6cdff";
-
-      try{
-        await update(sesRef,{
-          words:[...words,{ w:titleCaseFirstWordIfNeeded(words.length,word), by:myUid, c:myColourNow, t:Date.now() }],
-          currentTurnUid: peerUid || null
-        });
-        wordInput.value="";
-        if(!peerUid){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
-        await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`),{lastActive:Date.now()});
-      }catch(e){ console.error(e); errorBox.textContent="Failed to add word. Check your connection."; }
+      }catch(e){
+        console.error(e);
+        errorBox.textContent="Submit failed — try again.";
+      }
     };
 
-    /* ========= Utilities ========= */
+/* ========= Utilities ========= */
     copyBtn.onclick=async()=>{ const txt=[...document.querySelectorAll("#storyBox .word")].map(el=>el.textContent).join(" "); await navigator.clipboard.writeText(txt); copyBtn.textContent="Copied!"; setTimeout(()=>copyBtn.textContent="Copy story",1200); };
     downloadBtn.onclick=()=>{ const last=loadLastSession(); const fileSid=last?.sessionId||"session"; const txt=[...document.querySelectorAll("#storyBox .word")].map(el=>el.textContent).join(" "); const blob=new Blob([txt],{type:"text/plain"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`story-${fileSid}.txt`; a.click(); URL.revokeObjectURL(a.href); };
     leaveBtn.onclick=async()=>{ try{ const last=loadLastSession(); if(last){ const sesRef=ref(db,`sessions/${last.derivedKey}`); const snap=await get(sesRef); const players=(snap.val()&&snap.val().players)||{}; const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId); if(myUid) await remove(ref(db,`sessions/${last.derivedKey}/players/${myUid}`)); } }catch{} localStorage.removeItem(LAST_KEY); location.reload(); };
