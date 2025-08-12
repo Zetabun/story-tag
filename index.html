@@ -70,6 +70,9 @@
     }
   
     .swatch.is-locked, .swatchInput:disabled + .swatch, input[type="color"]:disabled + .swatch { opacity:.6; filter:grayscale(0.2); cursor:not-allowed; }
+
+    .colourWrap.locked .swatch { opacity:.55; filter:grayscale(0.25); cursor:not-allowed; box-shadow:none; }
+    .colourWrap.locked .swatchInput { pointer-events:none; }
 </style>
 </head>
 <body>
@@ -263,8 +266,10 @@
     }
     function setColourLocked(locked){
       try{
+        const wrap = colourSwatch.parentElement;
         colourPicker.disabled = !!locked;
-        colourPicker.classList.toggle('is-locked', !!locked);
+        wrap.classList.toggle('locked', !!locked);
+        colourSwatch.classList.toggle('is-locked', !!locked);
         colourSwatch.title = locked ? "Colour locked for this session" : "Pick your colour";
       }catch{}
     }
@@ -482,10 +487,27 @@
           renderStory(words,mergedPlayers);
 
           
+          
+          // Recover cturn if it points at a missing seat
+          if (cturn && !players[cturn]){
+            const fallback = activePeerId(players, myUid) || myUid;
+            update(sesRef,{currentTurnUid:fallback});
+            cturn = fallback;
+          }
+
+          // Auto-pass to peer after my first word when peer is present (handles null or self)
+          const last = words[words.length-1];
+          const shouldAutoPass = (ids.length >= 2) && last && (last.by === myUid) && (!cturn || cturn === myUid) && peerId;
+          if (shouldAutoPass) {
+            cturn = peerId; // prevent "second go" locally
+            update(sesRef,{currentTurnUid:peerId});
+          }
+
           // Enforce colour rules: must pick before first word; lock after first word
           const myWordsSoFar = myWordCount(words, myUid);
           const colourChosen = !!(players?.[myUid]?.colour);
-          setColourLocked(myWordsSoFar > 0 || !!(players?.[myUid]?.colourLocked));
+          const locked = (myWordsSoFar > 0) || !!(players?.[myUid]?.colourLocked);
+          setColourLocked(locked);
 
           // If it's my turn but I haven't chosen a colour yet, block typing
           if (cturn === myUid && !colourChosen) {
@@ -501,9 +523,9 @@
           }
 
           const isMyTurn=(cturn===myUid)&&(ids.length===2);
-          if(wasMyTurn===false && isMyTurn) playTurnSound(); wasMyTurn=isMyTurn;
-
-          saveLocal({sessionId:sid,myName});saveLocal({sessionId:sid,myName});
+          if(wasMyTurn===false && isMyTurn) playTurnSound();
+          wasMyTurn=isMyTurn;
+saveLocal({sessionId:sid,myName});saveLocal({sessionId:sid,myName});
         });
 
         if(!auto){ wordInput.focus(); joinStatus.innerHTML='<span class="ok">Ready!</span>'; }
