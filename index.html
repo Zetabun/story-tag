@@ -75,7 +75,27 @@
     .colourWrap.locked .swatchInput { pointer-events:none; }
 
     .colourWrap.chosen .swatch { opacity:.8; }
-</style>
+
+    /* Word wrapping & scroll for long stories */
+    .story {
+      white-space: pre-wrap;           /* respect line breaks, wrap normally */
+      overflow-wrap: anywhere;         /* break long unbroken strings */
+      word-break: break-word;          /* older fallback */
+      max-height: 50vh;                /* make long stories scrollable */
+      overflow-y: auto;
+    }
+    /* Dash look when colour is locked */
+    .swatch.dash {
+      width: auto;
+      min-width: 22px;
+      padding: 0 6px;
+      background: transparent !important;
+      color: #b9c0ff;
+      text-align: center;
+      line-height: 14px;
+    }
+
+  </style>
 </head>
 <body>
   <div class="wrap">
@@ -266,15 +286,32 @@
     function myWordCount(words, uid){ 
       try { return (Array.isArray(words)?words:[]).reduce((n,w)=>n+((w&&w.by===uid)?1:0),0); } catch { return 0; } 
     }
+    
     function setColourLocked(locked){
       try{
         const wrap = colourSwatch.parentElement;
         colourPicker.disabled = !!locked;
         wrap.classList.toggle('locked', !!locked);
         colourSwatch.classList.toggle('is-locked', !!locked);
-        colourSwatch.title = locked ? "Colour locked for this session" : "Pick your colour";
+        if (locked) {
+          // Hide the native colour input to avoid overlay/glitch
+          colourPicker.style.display = 'none';
+          // Show a simple dash instead of a colour swatch
+          colourSwatch.textContent = '—';
+          colourSwatch.classList.add('dash');
+          colourSwatch.style.background = 'transparent';
+          colourSwatch.title = "Colour locked for this session";
+        } else {
+          // Restore picker and swatch
+          colourPicker.style.display = 'block';
+          colourSwatch.textContent = '';
+          colourSwatch.classList.remove('dash');
+          setMyColourUI(colourPicker.value);
+          colourSwatch.title = "Pick your colour";
+        }
       }catch{}
     }
+
     function setColourChosen(chosen){
       try{
         colourSwatch.parentElement.classList.toggle('chosen', !!chosen);
