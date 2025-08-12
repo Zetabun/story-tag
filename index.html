@@ -351,12 +351,20 @@
         auth.style.display="none"; game.style.display="block";
         sessionLabel.textContent=sid; youLabel.textContent=myName;
 
-        // Decide my colour: server-locked, or pending from localStorage, or fresh random
+        // Decide my colour in this priority:
+        // 1) Server-locked colour
+        // 2) Locally locked colour (survives UID changes across refresh)
+        // 3) Pending (pre-lock)
+        // 4) Fresh random (seeded now)
+        const lockedKey  = `storytag_locked_colour_${derivedKey}_${clientId}`;
         const pendingKey = `storytag_pending_colour_${derivedKey}_${clientId}`;
+        const lockedLocal  = localStorage.getItem(lockedKey);
         const pendingLocal = localStorage.getItem(pendingKey);
-        let myColourNow = (players[myUid]?.colour) || pendingLocal || defaultColour;
-        if (!players[myUid]?.colour && !pendingLocal) { try { localStorage.setItem(pendingKey, myColourNow); } catch {} }
+        let myColourNow = (players[myUid]?.colour) || lockedLocal || pendingLocal || defaultColour;
+        if (!players[myUid]?.colour && !lockedLocal && !pendingLocal) { try { localStorage.setItem(pendingKey, myColourNow); } catch {} }
         setMyColourUI(myColourNow);
+        // If I don't have a server colour but I do have a locked local colour, sync it to the server now
+        if (!players[myUid]?.colour && lockedLocal) { try { await update(ref(db,`sessions/${derivedKey}/players/${myUid}`), { colour: lockedLocal }); } catch {} }
 
         // Subscribe to session
         if(window._unsub) window._unsub();
@@ -372,12 +380,14 @@
           
           peerLabel.textContent=peerId?(players[peerId]?.name||"Partner"):"(none)";
 
-          // Update swatch and dot to server colour (or pending while unlocked)
+          // Update swatch and dot to server colour (prefer server; else locked; else pending)
           const myColourFromServer = mergedPlayers[myUid]?.colour;
+          const lockedKey  = `storytag_locked_colour_${derivedKey}_${clientId}`;
           const pendingKey = `storytag_pending_colour_${derivedKey}_${clientId}`;
-          const pendingLocal = (!myColourFromServer) ? (localStorage.getItem(pendingKey) || null) : null;
-          setMyColourUI(myColourFromServer || pendingLocal);
-          setDotColour(youDot, myColourFromServer || pendingLocal, !!mergedPlayers[myUid]);
+          const lockedLocal  = (!myColourFromServer) ? (localStorage.getItem(lockedKey)  || null) : null;
+          const pendingLocal = (!myColourFromServer && !lockedLocal) ? (localStorage.getItem(pendingKey) || null) : null;
+          setMyColourUI(myColourFromServer || lockedLocal || pendingLocal);
+          setDotColour(youDot, myColourFromServer || lockedLocal || pendingLocal, !!mergedPlayers[myUid]);
           setDotColour(peerDot, mergedPlayers[peerId]?.colour, !!mergedPlayers[peerId]);
 
           setUIConnected(ids.length>0);
@@ -448,7 +458,11 @@
           ...(players[myUid]?.colour ? {} : { [`players/${myUid}/colour`]: myColourNow })
         });
         await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`),{lastActive:Date.now()});
-        try { if (!players[myUid]?.colour) localStorage.removeItem(pendingKey); } catch {}
+        try {
+          const lockKeyNow = `${"storytag_locked_colour_"}${last.derivedKey}_${clientId}`;
+          localStorage.setItem(lockKeyNow, myColourNow);
+          localStorage.removeItem(pendingKey);
+        } catch {}
 
 
         wordInput.value="";
