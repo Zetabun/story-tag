@@ -99,8 +99,8 @@
           <label class="small"><input id="rememberChk" type="checkbox" /> Remember this session on this device</label>
         </div>
         <div class="row">
-          <button id="createBtn">Create session</button>
-          <button id="joinBtn">Join session</button>
+          <button id="createBtn" type="button">Create session</button>
+          <button id="joinBtn" type="button">Join session</button>
           <div id="joinStatus" class="small"></div>
         </div>
       </div>
@@ -124,7 +124,7 @@
             </span>
           </div>
           <div class="pill">Words: <span id="wordCount">0</span></div>
-          <div class="pill">Status: <span id="statusDot">Waiting…</span></div>
+          <div class="pill">Status: <span id="statusDot">Offline</span></div>
           <div class="pill">
             Colour:
             <span class="colourWrap">
@@ -144,16 +144,16 @@
 
         <div class="row">
           <input id="wordInput" type="text" placeholder="Your word…" autocomplete="off" />
-          <button id="submitBtn">Add Word</button>
+          <button id="submitBtn" type="button">Add Word</button>
         </div>
         <div class="hint">Rules: one word per turn. Letters, apostrophes, hyphens, and optional punctuation at the end (. , ! ?) allowed.</div>
 
         <div class="divider"></div>
 
         <div class="toolbar">
-          <button id="copyBtn">Copy story</button>
-          <button id="downloadBtn">Download .txt</button>
-          <button id="leaveBtn">Leave session</button>
+          <button id="copyBtn" type="button">Copy story</button>
+          <button id="downloadBtn" type="button">Download .txt</button>
+          <button id="leaveBtn" type="button">Leave session</button>
         </div>
         <div id="errorBox" class="small err"></div>
       </div>
@@ -386,20 +386,19 @@
           setUIConnected(ids.length>0);
           renderStory(words,mergedPlayers);
           // Auto-pass to peer after my first word if needed
-          const last = words[words.length-1];
-          const shouldAutoPass = (Object.keys(players).length >= 2) && last && (last.by === myUid) && (!cturn || cturn === myUid) && peerId;
+          const lastWord = words[words.length-1];
+          const shouldAutoPass = (Object.keys(players).length >= 2) && lastWord && (lastWord.by === myUid) && (!cturn || cturn === myUid) && peerId;
           if (shouldAutoPass) {
             cturn = peerId;
             update(sesRef,{ currentTurnUid: peerId });
           }
-        
+
 
           if(cturn && !players[cturn] && ids.length>0){ const newTurn=ids[0]; update(sesRef,{currentTurnUid:newTurn}); cturn=newTurn; }
           if(ids.length<2 && words.length>0){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
           else setTurnBanner(cturn,players,myUid);
 
-          const last=words[words.length-1]; const isMyTurn=(cturn===myUid)&&(ids.length===2);
-          if(ids.length===2 && last && last.by===myUid && cturn===myUid && peerId){ update(sesRef,{currentTurnUid:peerId}); }
+          const isMyTurn=(cturn===myUid)&&(ids.length===2);
           if(wasMyTurn===false && isMyTurn) playTurnSound(); wasMyTurn=isMyTurn;
 
           saveLocal({sessionId:sid,myName});
