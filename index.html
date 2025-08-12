@@ -6,7 +6,6 @@
         content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>Story Tag — Two-Player Word Game</title>
   <style>
-    /* --- Layout resets & fix inputs overflowing --- */
     *, *::before, *::after { box-sizing: border-box; }
     :root { --footer-h: 34px; font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif; }
     @media (max-width: 768px){ :root{ --footer-h: 40px; } }
@@ -14,26 +13,29 @@
     body { margin:0; background:#0f1220; color:#f5f7ff; display:flex; min-height:100vh; }
     .wrap { margin:auto; width:min(900px, 92vw); padding:24px; padding-bottom: calc(var(--footer-h) + env(safe-area-inset-bottom, 0px) + 12px); }
     .card { background:#171a2b; border:1px solid #2a2f4a; border-radius:14px; padding:20px; box-shadow:0 10px 30px rgba(0,0,0,.25); overflow:hidden; }
-    h1 { margin:0 0 6px; font-size: clamp(24px, 4vw, 34px); letter-spacing:.3px; }
-    p.sub { margin:0 0 18px; color:#b9c0ff; }
 
+    h1 { margin:0 0 6px; font-size: clamp(24px, 4vw, 34px); letter-spacing:.3px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .version-label {
+      font-size: .62em; font-weight: 500; color:#9aa3d7; letter-spacing:.4px;
+      background:#12162c; border:1px solid #2a2f4a; padding:4px 8px; border-radius:999px;
+    }
+    .version-badge { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; color:#b9c0ff; }
+
+    p.sub { margin:0 0 18px; color:#b9c0ff; }
     .grid { display:grid; gap:12px; grid-template-columns: 1fr; }
     label { font-size:14px; color:#b9c0ff; }
     input[type="text"], input[type="password"]{
       width:100%; max-width:100%; padding:12px 14px; border-radius:10px; border:1px solid #303659;
-      background:#0f1328; color:#fff; font-size:16px; /* 16px stops iOS focus-zoom */
-      display:block;
+      background:#0f1328; color:#fff; font-size:16px; display:block;
     }
-    input::placeholder { color:#8890b3; }
-    input[disabled] { opacity:.6; }
-
+    input::placeholder { color:#8890b3; } input[disabled]{ opacity:.6; }
     button { padding:12px 16px; border-radius:10px; border:1px solid #39406a; background:#2a2f4a; color:#fff; cursor:pointer; transition:.15s transform ease; }
-    button:hover { transform: translateY(-1px); }
-    button:disabled { opacity:.55; cursor:not-allowed; transform:none; }
+    button:hover { transform: translateY(-1px); } button:disabled { opacity:.55; cursor:not-allowed; transform:none; }
 
     .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .hint { font-size:13px; color:#9aa3d7; }
     .ok { color:#69f0ae; } .err { color:#ff6b6b; } .warn { color:#ffd166; }
+
     .story { background:#0c0f22; border:1px solid #2a2f4a; border-radius:12px; padding:14px; min-height:100px; line-height:1.6; }
     .toolbar { display:flex; gap:8px; flex-wrap:wrap; }
     .pill { padding:6px 10px; border-radius:999px; background:#1c2142; border:1px solid #2a2f4a; color:#c6cdff; font-size:12px; display:flex; align-items:center; gap:8px; }
@@ -41,6 +43,7 @@
     .divider { height:1px; background:#2a2f4a; margin:14px 0; }
     .tag { display:inline-flex; align-items:center; gap:6px; }
     .dot { width:10px; height:10px; border-radius:50%; background:#666; box-shadow:0 0 0 1px rgba(255,255,255,.12) inset; }
+
     .word { display:inline; } .word + .word::before { content:" "; }
 
     .colourWrap { position:relative; display:inline-block; }
@@ -49,14 +52,12 @@
 
     .presence{ font-weight:600; } .online{ color:#69f0ae; } .away{ color:#ffd166; } .offline{ color:#b0b7e1; }
 
-    /* Footer chip that never overlaps content */
     .footer-chip{
       position:fixed; bottom:calc(8px + env(safe-area-inset-bottom, 0px)); left:50%; transform:translateX(-50%);
       font-size:12px; color:#9aa3d7; background:rgba(23,26,43,0.92); border:1px solid #2a2f4a; border-radius:10px;
       padding:6px 10px; z-index:30; -webkit-backdrop-filter:saturate(130%) blur(6px); backdrop-filter:saturate(130%) blur(6px);
     }
 
-    /* Mobile tweaks */
     @media (max-width: 768px) {
       .row { gap:8px; }
       .pill { font-size:11px; padding:6px 8px; }
@@ -69,7 +70,10 @@
 <body>
   <div class="wrap">
     <div class="card">
-      <h1>Story Tag</h1>
+      <h1>
+        Story Tag
+        <span class="version-label">Alpha <span id="buildVersion" class="version-badge">v0.1</span></span>
+      </h1>
       <p class="sub">Create a private session with an ID + password, then share both with a friend. Take turns adding one word to build a story.</p>
 
       <!-- Login -->
@@ -153,11 +157,16 @@
     </div>
   </div>
 
-  <!-- Footer that never overlaps -->
+  <!-- Footer -->
   <div class="footer-chip">Built for fun — share your Session ID + Password with a friend and take turns!</div>
 
   <!-- App -->
   <script type="module">
+    /* ========= Version badge (bump here) ========= */
+    const BUILD_NUMBER = "v0.1";
+    document.getElementById("buildVersion").textContent = BUILD_NUMBER;
+
+    /* ========= Firebase ========= */
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
       getDatabase, ref, get, set, update, onValue, serverTimestamp,
@@ -165,7 +174,7 @@
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
     const firebaseConfig = {
-      apiKey: "AIzaSyCVOzSTr3lPRm1BRzKTJtdEG-nsdnVIhiM",  /* your new key */
+      apiKey: "AIzaSyCVOzSTr3lPRm1BRzKTJtdEG-nsdnVIhiM",
       authDomain: "zetabun-91b0c.firebaseapp.com",
       databaseURL: "https://zetabun-91b0c-default-rtdb.europe-west1.firebasedatabase.app",
       projectId: "zetabun-91b0c",
@@ -178,7 +187,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // Shortcuts
+    /* ========= DOM ========= */
     const $ = id => document.getElementById(id);
     const createBtn = $("createBtn"), joinBtn = $("joinBtn"), joinStatus = $("joinStatus"),
           auth = $("auth"), game = $("game"),
@@ -195,82 +204,69 @@
           copyBtn = $("copyBtn"), downloadBtn = $("downloadBtn"), leaveBtn = $("leaveBtn"),
           errorBox = $("errorBox");
 
-    /* -------- Stable client id (for reclaim) -------- */
+    /* ========= Stable client id ========= */
     const CID_KEY = "storytag_client_id";
-    function getClientId() {
-      let cid = localStorage.getItem(CID_KEY);
-      if (!cid) { cid = "c_" + Math.random().toString(36).slice(2,12); localStorage.setItem(CID_KEY, cid); }
-      return cid;
-    }
+    function getClientId(){ let cid=localStorage.getItem(CID_KEY); if(!cid){ cid="c_"+Math.random().toString(36).slice(2,12); localStorage.setItem(CID_KEY,cid);} return cid; }
     const clientId = getClientId();
 
-    /* -------- Local storage helpers -------- */
+    /* ========= Local storage ========= */
     const LS_KEY="storytag_state_v1", REM_KEY="storytag_remembered_sessions_v1", LAST_KEY="storytag_last_session_v1";
-    const saveLocal = s => localStorage.setItem(LS_KEY, JSON.stringify(s));
-    const loadLocal = () => { try{ return JSON.parse(localStorage.getItem(LS_KEY)||"{}"); }catch{return{};} };
-    const loadRememberMap = () => { try{ return JSON.parse(localStorage.getItem(REM_KEY)||"{}"); }catch{return{};} };
-    const saveRememberMap = m => localStorage.setItem(REM_KEY, JSON.stringify(m));
-    const saveLastSession = o => localStorage.setItem(LAST_KEY, JSON.stringify(o||{}));
-    const loadLastSession = () => { try{ return JSON.parse(localStorage.getItem(LAST_KEY)||"null"); }catch{return null;} };
+    const saveLocal=s=>localStorage.setItem(LS_KEY,JSON.stringify(s));
+    const loadLocal=()=>{ try{return JSON.parse(localStorage.getItem(LS_KEY)||"{}");}catch{return{};} };
+    const loadRememberMap=()=>{ try{return JSON.parse(localStorage.getItem(REM_KEY)||"{}");}catch{return{};} };
+    const saveRememberMap=m=>localStorage.setItem(REM_KEY,JSON.stringify(m));
+    const saveLastSession=o=>localStorage.setItem(LAST_KEY,JSON.stringify(o||{}));
+    const loadLastSession=()=>{ try{return JSON.parse(localStorage.getItem(LAST_KEY)||"null");}catch{return null;} };
 
-    /* -------- Presence / thresholds -------- */
+    /* ========= Presence ========= */
     const ONLINE_MS = 20*1000, AWAY_MS = 2*60*1000, STALE_MS = 60*1000;
 
-    function setSavedHintText(sid){
-      const map = loadRememberMap();
-      savedHint.textContent = (sid && map[sid]) ? "Saved on this device — password optional." : "";
-    }
+    function setSavedHintText(sid){ const map=loadRememberMap(); savedHint.textContent=(sid&&map[sid])?"Saved on this device — password optional.":""; }
 
-    const WORD_RX = /^[A-Za-z]+(?:['-][A-Za-z]+)*(?:[.,!?])?$/;
-    const titleCaseFirstWordIfNeeded = (i,w) => (i===0 && w.length) ? w[0].toUpperCase() + w.slice(1) : w;
-    const setUIConnected = b => statusDot.textContent = b ? "Connected" : "Offline";
-    const escapeHtml = s => (s||"").replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[c]));
-    const setDotColour = (el,c,p) => { el.style.background = p ? (c||"#666") : "#666"; el.style.boxShadow="0 0 0 1px rgba(255,255,255,.12) inset"; };
-    const setMyColourUI = hex => { if(hex){ $("colourSwatch").style.background=hex; youDot.style.background=hex; } };
-    const presenceOf = ts => { const d = Date.now() - (ts||0); return !ts ? {cls:"offline",label:"(offline)"} : d<=ONLINE_MS ? {cls:"online",label:"(online)"} : d<=AWAY_MS ? {cls:"away",label:"(away)"} : {cls:"offline",label:"(offline)"}; };
+    /* ========= Helpers ========= */
+    const WORD_RX=/^[A-Za-z]+(?:['-][A-Za-z]+)*(?:[.,!?])?$/;
+    const titleCaseFirstWordIfNeeded=(i,w)=>(i===0&&w.length)?w[0].toUpperCase()+w.slice(1):w;
+    const setUIConnected=b=>statusDot.textContent=b?"Connected":"Offline";
+    const escapeHtml=s=>(s||"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+    const setDotColour=(el,c,p)=>{ el.style.background=p?(c||"#666"):"#666"; el.style.boxShadow="0 0 0 1px rgba(255,255,255,.12) inset"; };
+    const setMyColourUI=hex=>{ if(hex){ colourSwatch.style.background=hex; youDot.style.background=hex; } };
+    const presenceOf=ts=>{ const d=Date.now()-(ts||0); return !ts?{cls:"offline",label:"(offline)"}:d<=ONLINE_MS?{cls:"online",label:"(online)"}:d<=AWAY_MS?{cls:"away",label:"(away)"}:{cls:"offline",label:"(offline)"}; };
 
     async function sha256Base64Url(input){
-      const enc = new TextEncoder();
-      const hash = await crypto.subtle.digest("SHA-256", enc.encode(input));
-      const bytes = new Uint8Array(hash);
-      let bin=""; for (let b of bytes) bin += String.fromCharCode(b);
+      const enc=new TextEncoder(); const hash=await crypto.subtle.digest("SHA-256",enc.encode(input));
+      const bytes=new Uint8Array(hash); let bin=""; for(let b of bytes) bin+=String.fromCharCode(b);
       return btoa(bin).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"");
     }
 
-    /* -------- Colour persistence helpers -------- */
-    const localColour = {}; // uid -> hex
+    /* ========= Colour persistence ========= */
+    const localColour={}; // uid -> hex
 
     function renderStory(words, players){
-      storyBox.innerHTML = "";
-      if(!words.length){ storyBox.textContent="(No words yet—be the first to write!)"; wordCount.textContent="0"; return; }
+      storyBox.innerHTML=""; if(!words.length){ storyBox.textContent="(No words yet—be the first to write!)"; wordCount.textContent="0"; return; }
       for(const w of words){
-        const el = document.createElement("span");
-        el.className="word";
-        const col = w.c || (players?.[w.by]?.colour) || localColour[w.by] || "#c6cdff";
-        el.style.color = col;
-        el.textContent = w.w;
-        storyBox.appendChild(el);
+        const el=document.createElement("span"); el.className="word";
+        const col=w.c || (players?.[w.by]?.colour) || localColour[w.by] || "#c6cdff";
+        el.style.color=col; el.textContent=w.w; storyBox.appendChild(el);
       }
-      wordCount.textContent = String(words.length);
+      wordCount.textContent=String(words.length);
     }
 
     function setTurnBanner(currentTurnUid, players, myUid){
-      if(!players || !players[myUid]){ turnBanner.textContent="Waiting…"; return; }
-      const mine = currentTurnUid === myUid;
-      const theirUid = Object.keys(players).find(k => k !== myUid);
-      const their = theirUid ? players[theirUid] : null;
-      if (mine) turnBanner.innerHTML = `It’s <span class="turn">your</span> turn to write`;
-      else if (their) turnBanner.innerHTML = `<span class="nameTag">${escapeHtml(their?.name||"Partner")}</span>’s turn to write`;
-      else turnBanner.textContent = "Waiting for partner…";
-      submitBtn.disabled = !mine; wordInput.disabled = !mine; if (mine) wordInput.focus();
+      if(!players||!players[myUid]){ turnBanner.textContent="Waiting…"; return; }
+      const mine=currentTurnUid===myUid;
+      const theirUid=Object.keys(players).find(k=>k!==myUid); const their=theirUid?players[theirUid]:null;
+      if(mine) turnBanner.innerHTML=`It’s <span class="turn">your</span> turn to write`;
+      else if(their) turnBanner.innerHTML=`<span class="nameTag">${escapeHtml(their?.name||"Partner")}</span>’s turn to write`;
+      else turnBanner.textContent="Waiting for partner…";
+      submitBtn.disabled=!mine; wordInput.disabled=!mine; if(mine) wordInput.focus();
     }
 
+    // Turn sound
     let audioCtx=null, canPlaySound=false, wasMyTurn=null;
     const ensureAudio=()=>{ if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)(); };
     function playTurnSound(){
       if(!canPlaySound) return;
-      try{
-        ensureAudio(); const now = audioCtx.currentTime;
+      try{ ensureAudio(); const now=audioCtx.currentTime;
         const g=audioCtx.createGain(); g.gain.setValueAtTime(0.0001,now); g.gain.exponentialRampToValueAtTime(0.12,now+0.01); g.gain.exponentialRampToValueAtTime(0.0001,now+0.35); g.connect(audioCtx.destination);
         const o=audioCtx.createOscillator(); o.type="sine"; o.frequency.setValueAtTime(660,now); o.frequency.linearRampToValueAtTime(880,now+0.2); o.connect(g); o.start(now); o.stop(now+0.35);
       }catch{}
@@ -278,122 +274,96 @@
 
     // Prefill
     (function(){ const s=loadLocal(); if(s.sessionId&&s.myName){ nameInput.value=s.myName; sessionInput.value=s.sessionId; setSavedHintText(s.sessionId);} })();
-    sessionInput.addEventListener("input", ()=> setSavedHintText(sessionInput.value.trim()));
+    sessionInput.addEventListener("input",()=>setSavedHintText(sessionInput.value.trim()));
 
+    // Join/create with reclaim + stale eviction
     async function enterSession(mode, opts={}){
-      const { auto=false } = opts;
-      if(!auto) canPlaySound = true;
-      joinStatus.textContent="";
-      const name=(opts.myNameOverride??nameInput.value).trim();
-      const sid=(opts.sessionIdOverride??sessionInput.value).trim();
-      const pwd=opts.passwordOverride ?? passwordInput.value;
+      const {auto=false}=opts; if(!auto) canPlaySound=true;
+      joinStatus.textContent=""; const name=(opts.myNameOverride??nameInput.value).trim();
+      const sid=(opts.sessionIdOverride??sessionInput.value).trim(); const pwd=opts.passwordOverride ?? passwordInput.value;
       if(!name){ if(!auto) joinStatus.innerHTML='<span class="err">Enter your name</span>'; return; }
       if(!sid){ if(!auto) joinStatus.innerHTML='<span class="err">Enter a session ID</span>'; return; }
-      if(!auto){ joinBtn.disabled=true; createBtn.disabled=true; joinStatus.textContent = mode==='create' ? 'Creating…' : 'Joining…'; }
+      if(!auto){ joinBtn.disabled=true; createBtn.disabled=true; joinStatus.textContent=mode==='create'?'Creating…':'Joining…'; }
 
       try{
-        const remembered=loadRememberMap();
-        let derivedKey=opts.derivedKeyOverride||null;
+        const remembered=loadRememberMap(); let derivedKey=opts.derivedKeyOverride||null;
         if(!derivedKey){
-          if(mode==='join' && !pwd && remembered[sid]) derivedKey=remembered[sid];
-          else { if(!pwd){ if(!auto) joinStatus.innerHTML='<span class="err">Enter a password</span>'; return; } derivedKey=await sha256Base64Url(`${sid}:${pwd}`); }
+          if(mode==='join'&&!pwd&&remembered[sid]) derivedKey=remembered[sid];
+          else { if(!pwd){ if(!auto) joinStatus.innerHTML='<span class="err">Enter a password</span>'; return; }
+                 derivedKey=await sha256Base64Url(`${sid}:${pwd}`); }
         }
 
-        const sesRef=ref(db,`sessions/${derivedKey}`);
-        const snap=await get(sesRef);
-        const exists=snap.exists();
-        const existing=snap.val()||{};
-        const players=existing.players||{};
+        const sesRef=ref(db,`sessions/${derivedKey}`); const snap=await get(sesRef);
+        const exists=snap.exists(); const existing=snap.val()||{}; const players=existing.players||{};
+        if(mode==='create'&&exists){ if(!auto) joinStatus.innerHTML='<span class="warn">Session already exists. Use Join.</span>'; return; }
+        if(mode==='join'&&!exists){ if(!auto) joinStatus.innerHTML='<span class="warn">No session found. Use Create.</span>'; return; }
 
-        if(mode==='create' && exists){ if(!auto) joinStatus.innerHTML='<span class="warn">Session already exists. Use Join.</span>'; return; }
-        if(mode==='join' && !exists){ if(!auto) joinStatus.innerHTML='<span class="warn">No session found. Use Create.</span>'; return; }
+        let myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId) || ("u_"+Math.random().toString(36).slice(2,10));
+        let myName=name;
 
-        // Reclaim or make uid
-        let myUid = Object.keys(players).find(u=>players[u]?.clientId===clientId) || ("u_"+Math.random().toString(36).slice(2,10));
-        let myName = name;
-
-        // If full and not mine, evict stale (>60s)
-        const seatCount = Object.keys(players).length;
+        const seatCount=Object.keys(players).length;
         if(seatCount>=2 && !players[myUid]){
-          const now=Date.now();
-          const staleUid = Object.keys(players).find(u => (now - (players[u]?.lastActive||0)) > STALE_MS);
+          const now=Date.now(); const staleUid=Object.keys(players).find(u=>(now-(players[u]?.lastActive||0))>STALE_MS);
           if(staleUid) await remove(ref(db,`sessions/${derivedKey}/players/${staleUid}`));
           else { if(!auto) joinStatus.innerHTML='<span class="err">Session is full (2/2)</span>'; return; }
         }
 
-        // Create session if needed
-        if(!exists && mode==='create'){
-          await set(sesRef,{ createdAt:serverTimestamp(), friendlyId:sid, words:[], currentTurnUid:myUid, players:{} });
-        } else if (exists && !existing.friendlyId){
-          await update(sesRef,{ friendlyId: existing.friendlyId || sid });
-        }
+        if(!exists&&mode==='create'){ await set(sesRef,{createdAt:serverTimestamp(),friendlyId:sid,words:[],currentTurnUid:myUid,players:{}}); }
+        else if(exists&&!existing.friendlyId){ await update(sesRef,{friendlyId:existing.friendlyId||sid}); }
 
-        // Disambiguate same names
-        if(!players[myUid] && Object.keys(players).length===1){
+        if(!players[myUid]&&Object.keys(players).length===1){
           const [other]=Object.keys(players);
-          if(players[other]?.name?.trim().toLowerCase()===name.toLowerCase()) myName = `${name} (2)`;
+          if(players[other]?.name?.trim().toLowerCase()===name.toLowerCase()) myName=`${name} (2)`;
         }
 
-        const defaultColour= colourPicker.value || `#${Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,"0")}`;
-        const myPlayerRef = ref(db,`sessions/${derivedKey}/players/${myUid}`);
+        const defaultColour=colourPicker.value || `#${Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,"0")}`;
+        const myPlayerRef=ref(db,`sessions/${derivedKey}/players/${myUid}`);
         await set(myPlayerRef,{ uid:myUid, clientId, name:myName, colour:players[myUid]?.colour||defaultColour, joinedAt:serverTimestamp(), lastActive:Date.now() });
         onDisconnect(myPlayerRef).remove();
         window.addEventListener("unload",()=>{ try{ navigator.sendBeacon && remove(myPlayerRef); }catch{} });
 
-        if(!auto && rememberChk.checked){ const map=loadRememberMap(); map[sid]=derivedKey; saveRememberMap(map); setSavedHintText(sid); }
-        saveLastSession({ sessionId:sid, derivedKey, myName });
+        if(!auto&&rememberChk.checked){ const map=loadRememberMap(); map[sid]=derivedKey; saveRememberMap(map); setSavedHintText(sid); }
+        saveLastSession({sessionId:sid,derivedKey,myName});
 
         auth.style.display="none"; game.style.display="block";
-        sessionLabel.textContent=sid;
-        youLabel.textContent=myName;
-        colourPicker.value = players[myUid]?.colour || defaultColour;
-        localColour[myUid]=colourPicker.value; setMyColourUI(colourPicker.value);
+        sessionLabel.textContent=sid; youLabel.textContent=myName;
+        colourPicker.value=players[myUid]?.colour||defaultColour; localColour[myUid]=colourPicker.value; setMyColourUI(colourPicker.value);
 
-        // Subscribe
         if(window._unsub) window._unsub();
-        window._unsub = onValue(sesRef, s=>{
-          const val=s.val()||{};
-          const players=val.players||{};
-          const words=val.words||[];
-          let cturn=val.currentTurnUid;
-          const ids=Object.keys(players);
-          const peerId=ids.find(k=>k!==myUid);
+        window._unsub=onValue(sesRef,s=>{
+          const val=s.val()||{}; const players=val.players||{}; const words=val.words||[]; let cturn=val.currentTurnUid;
+          const ids=Object.keys(players); const peerId=ids.find(k=>k!==myUid);
 
-          const meP=presenceOf(players[myUid]?.lastActive);
-          const peP=presenceOf(players[peerId]?.lastActive);
+          const meP=presenceOf(players[myUid]?.lastActive); const peP=presenceOf(players[peerId]?.lastActive);
           youPresence.className=`presence ${meP.cls}`; youPresence.textContent=meP.label;
           peerPresence.className=`presence ${peP.cls}`; peerPresence.textContent=peP.label;
 
-          // Merge local colour to avoid flicker
-          const mergedPlayers = JSON.parse(JSON.stringify(players||{}));
+          const mergedPlayers=JSON.parse(JSON.stringify(players||{}));
           if(localColour[myUid]){ mergedPlayers[myUid]=mergedPlayers[myUid]||{}; mergedPlayers[myUid].colour=localColour[myUid]; }
-          peerLabel.textContent = peerId ? (players[peerId]?.name || "Partner") : "(none)";
-          setDotColour(youDot, mergedPlayers[myUid]?.colour, !!mergedPlayers[myUid]);
-          setDotColour(peerDot, mergedPlayers[peerId]?.colour, !!mergedPlayers[peerId]);
+          peerLabel.textContent=peerId?(players[peerId]?.name||"Partner"):"(none)";
+          setDotColour(youDot,mergedPlayers[myUid]?.colour,!!mergedPlayers[myUid]);
+          setDotColour(peerDot,mergedPlayers[peerId]?.colour,!!mergedPlayers[peerId]);
+          setMyColourUI(mergedPlayers[myUid]?.colour);
 
           setUIConnected(ids.length>0);
-          renderStory(words, mergedPlayers);
+          renderStory(words,mergedPlayers);
 
-          if(cturn && !players[cturn] && ids.length>0){ const newTurn=ids[0]; update(sesRef,{ currentTurnUid:newTurn }); cturn=newTurn; }
+          if(cturn && !players[cturn] && ids.length>0){ const newTurn=ids[0]; update(sesRef,{currentTurnUid:newTurn}); cturn=newTurn; }
           if(ids.length<2 && words.length>0){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
-          else setTurnBanner(cturn, players, myUid);
+          else setTurnBanner(cturn,players,myUid);
 
-          const last=words[words.length-1];
-          if(ids.length===2 && last && last.by===myUid && cturn===myUid && peerId){ update(sesRef,{ currentTurnUid:peerId }); }
+          const last=words[words.length-1]; const isMyTurn=(cturn===myUid)&&(ids.length===2);
+          if(ids.length===2 && last && last.by===myUid && cturn===myUid && peerId){ update(sesRef,{currentTurnUid:peerId}); }
+          if(wasMyTurn===false && isMyTurn) playTurnSound(); wasMyTurn=isMyTurn;
 
-          const isMyTurn=(cturn===myUid) && (ids.length===2);
-          if(wasMyTurn===false && isMyTurn) playTurnSound();
-          wasMyTurn = isMyTurn;
-
-          saveLocal({ sessionId:sid, myName });
+          saveLocal({sessionId:sid,myName});
         });
 
         if(!auto){ wordInput.focus(); joinStatus.innerHTML='<span class="ok">Ready!</span>'; }
 
-        // Presence heartbeat + on interaction
         if(window._presenceTimer) clearInterval(window._presenceTimer);
-        window._presenceTimer = setInterval(()=>{ update(ref(db,`sessions/${derivedKey}/players/${myUid}`), { lastActive: Date.now() }).catch(()=>{}); }, 10000);
-        const bump=()=> update(ref(db,`sessions/${derivedKey}/players/${myUid}`), { lastActive: Date.now() }).catch(()=>{});
+        window._presenceTimer=setInterval(()=>{ update(ref(db,`sessions/${derivedKey}/players/${myUid}`),{lastActive:Date.now()}).catch(()=>{}); },10000);
+        const bump=()=>update(ref(db,`sessions/${derivedKey}/players/${myUid}`),{lastActive:Date.now()}).catch(()=>{});
         ["click","keydown","touchstart","visibilitychange"].forEach(ev=>document.addEventListener(ev,bump,{passive:true}));
 
       }catch(e){
@@ -404,41 +374,43 @@
       }
     }
 
-    createBtn.onclick = ()=> enterSession('create');
-    joinBtn.onclick = ()=> enterSession('join');
+    createBtn.onclick=()=>enterSession('create');
+    joinBtn.onclick=()=>enterSession('join');
 
-    // Colour change → save immediately + persist locally
-    colourPicker.addEventListener("input", async ()=>{
+    /* ========= Colour change: update UI instantly, then DB ========= */
+    async function handleColourChange(){
       try{
         const last=loadLastSession(); if(!last) return;
-        const sesRef=ref(db,`sessions/${last.derivedKey}`);
-        const snap=await get(sesRef); const players=(snap.val()&&snap.val().players)||{};
-        const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId);
-        const hex=colourPicker.value; localColour[myUid]=hex; setMyColourUI(hex);
-        if(myUid) await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`), { colour:hex, lastActive:Date.now() });
-      }catch(e){ console.error(e); }
-    });
+        const sesRef=ref(db,`sessions/${last.derivedKey}`); const snap=await get(sesRef);
+        const players=(snap.val()&&snap.val().players)||{}; const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId);
+        const hex=colourPicker.value;
 
-    submitBtn.onclick = async ()=>{
+        // Instant UI
+        localColour[myUid]=hex; setMyColourUI(hex); setDotColour(youDot,hex,true);
+
+        // Persist
+        if(myUid) await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`),{ colour:hex, lastActive:Date.now() });
+      }catch(e){ console.error(e); }
+    }
+    colourPicker.addEventListener("input",handleColourChange);
+    colourPicker.addEventListener("change",handleColourChange);
+
+    /* ========= Submit word ========= */
+    submitBtn.onclick=async ()=>{
       errorBox.textContent="";
-      let word=(wordInput.value||"").trim();
-      if(!word) return;
+      let word=(wordInput.value||"").trim(); if(!word) return;
 
       const last=loadLastSession(); if(!last){ errorBox.textContent="No active session."; return; }
-      const sesRef=ref(db,`sessions/${last.derivedKey}`);
-      const sesSnap=await get(sesRef); const ses=sesSnap.val();
+      const sesRef=ref(db,`sessions/${last.derivedKey}`); const sesSnap=await get(sesRef); const ses=sesSnap.val();
       if(!ses){ errorBox.textContent="Session not found."; return; }
 
-      const players=ses.players||{};
-      const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId);
+      const players=ses.players||{}; const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId);
       if(!myUid){ errorBox.textContent="Rejoin required."; return; }
-
       if(ses.currentTurnUid!==myUid){ errorBox.textContent="Not your turn yet."; wordInput.value=""; return; }
       if(!WORD_RX.test(word)){ errorBox.textContent="Invalid word. Use letters, apostrophes, hyphens, optional .,!? at end."; return; }
 
-      const words=Array.isArray(ses.words)?ses.words:[];
-      const peerUid=Object.keys(players).find(k=>k!==myUid);
-      const myColourNow = (players[myUid]?.colour) || localColour[myUid] || colourPicker.value || "#c6cdff";
+      const words=Array.isArray(ses.words)?ses.words:[]; const peerUid=Object.keys(players).find(k=>k!==myUid);
+      const myColourNow=(players[myUid]?.colour)||localColour[myUid]||colourPicker.value||"#c6cdff";
 
       try{
         await update(sesRef,{
@@ -447,33 +419,20 @@
         });
         wordInput.value="";
         if(!peerUid){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
-        await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`), { lastActive: Date.now() });
+        await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`),{lastActive:Date.now()});
       }catch(e){ console.error(e); errorBox.textContent="Failed to add word. Check your connection."; }
     };
 
-    copyBtn.onclick = async ()=>{ const txt=[...document.querySelectorAll("#storyBox .word")].map(el=>el.textContent).join(" "); await navigator.clipboard.writeText(txt); copyBtn.textContent="Copied!"; setTimeout(()=>copyBtn.textContent="Copy story",1200); };
-    downloadBtn.onclick = ()=>{
-      const last=loadLastSession(); const fileSid=last?.sessionId||"session";
-      const txt=[...document.querySelectorAll("#storyBox .word")].map(el=>el.textContent).join(" ");
-      const blob=new Blob([txt],{type:"text/plain"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`story-${fileSid}.txt`; a.click(); URL.revokeObjectURL(a.href);
-    };
-    leaveBtn.onclick = async ()=>{
-      try{
-        const last=loadLastSession(); if(last){
-          const sesRef=ref(db,`sessions/${last.derivedKey}`);
-          const snap=await get(sesRef); const players=(snap.val()&&snap.val().players)||{};
-          const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId);
-          if(myUid) await remove(ref(db,`sessions/${last.derivedKey}/players/${myUid}`));
-        }
-      }catch{}
-      localStorage.removeItem(LAST_KEY); location.reload();
-    };
+    /* ========= Utilities ========= */
+    copyBtn.onclick=async()=>{ const txt=[...document.querySelectorAll("#storyBox .word")].map(el=>el.textContent).join(" "); await navigator.clipboard.writeText(txt); copyBtn.textContent="Copied!"; setTimeout(()=>copyBtn.textContent="Copy story",1200); };
+    downloadBtn.onclick=()=>{ const last=loadLastSession(); const fileSid=last?.sessionId||"session"; const txt=[...document.querySelectorAll("#storyBox .word")].map(el=>el.textContent).join(" "); const blob=new Blob([txt],{type:"text/plain"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`story-${fileSid}.txt`; a.click(); URL.revokeObjectURL(a.href); };
+    leaveBtn.onclick=async()=>{ try{ const last=loadLastSession(); if(last){ const sesRef=ref(db,`sessions/${last.derivedKey}`); const snap=await get(sesRef); const players=(snap.val()&&snap.val().players)||{}; const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId); if(myUid) await remove(ref(db,`sessions/${last.derivedKey}/players/${myUid}`)); } }catch{} localStorage.removeItem(LAST_KEY); location.reload(); };
 
-    wordInput.addEventListener("keydown", e=>{ if(e.key==="Enter") submitBtn.click(); });
-    sessionInput.addEventListener("keydown", e=>{ if(e.key==="Enter") joinBtn.click(); });
-    passwordInput.addEventListener("keydown", e=>{ if(e.key==="Enter") joinBtn.click(); });
+    wordInput.addEventListener("keydown",e=>{ if(e.key==="Enter") submitBtn.click(); });
+    sessionInput.addEventListener("keydown",e=>{ if(e.key==="Enter") joinBtn.click(); });
+    passwordInput.addEventListener("keydown",e=>{ if(e.key==="Enter") joinBtn.click(); });
 
-    document.addEventListener("visibilitychange", ()=>{ statusDot.textContent = document.hidden ? "Background" : "Connected"; });
+    document.addEventListener("visibilitychange",()=>{ statusDot.textContent=document.hidden?"Background":"Connected"; });
 
     // Auto-resume
     (async function(){
