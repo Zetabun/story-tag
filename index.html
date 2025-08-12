@@ -387,6 +387,24 @@
           setUIConnected(ids.length>0);
           renderStory(words,mergedPlayers);
 
+          // Default: keep picker disabled unless explicitly allowed below
+          try { colourPicker.disabled = true; } catch {}
+
+          // Unlock only if (1) it's my turn, (2) I haven't chosen a colour, (3) I haven't written before
+          try {
+            const myWordsSoFar = (Array.isArray(words)?words:[]).reduce((n,w)=>n+((w&&w.by===myUid)?1:0),0);
+            const colourChosen = !!(players && players[myUid] && players[myUid].colour);
+            const allowedToChooseNow = (cturn === myUid) && !colourChosen && (myWordsSoFar === 0);
+            if (allowedToChooseNow) {
+              colourPicker.disabled = false;
+              colourPicker.style.display = 'block';
+              submitBtn.disabled = true;
+              wordInput.disabled = true;
+              turnBanner.textContent = "Pick your colour to start";
+            }
+          } catch {}
+    
+
           if(cturn && !players[cturn] && ids.length>0){ const newTurn=ids[0]; update(sesRef,{currentTurnUid:newTurn}); cturn=newTurn; }
           if(ids.length<2 && words.length>0){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
           else setTurnBanner(cturn,players,myUid);
@@ -459,6 +477,7 @@ async function handleColourChange(){
       const players=ses.players||{}; const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId);
       if(!myUid){ errorBox.textContent="Rejoin required."; return; }
       if(ses.currentTurnUid!==myUid){ errorBox.textContent="Not your turn yet."; wordInput.value=""; return; }
+      if(!players[myUid]?.colour){ errorBox.textContent="Pick your colour first."; return; }
       if(!WORD_RX.test(word)){ errorBox.textContent="Invalid word. Use letters, apostrophes, hyphens, optional .,!? at end."; return; }
 
       const words=Array.isArray(ses.words)?ses.words:[]; const peerUid=Object.keys(players).find(k=>k!==myUid);
@@ -467,7 +486,7 @@ async function handleColourChange(){
       try{
         await update(sesRef,{
           words:[...words,{ w:titleCaseFirstWordIfNeeded(words.length,word), by:myUid, c:myColourNow, t:Date.now() }],
-          currentTurnUid: peerUid || myUid
+          currentTurnUid: peerUid || null
         });
         wordInput.value="";
         if(!peerUid){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
