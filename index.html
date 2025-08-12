@@ -216,6 +216,8 @@
           copyBtn = $("copyBtn"), downloadBtn = $("downloadBtn"), leaveBtn = $("leaveBtn"),
           errorBox = $("errorBox");
 
+    let localColourChosen = false;
+
     /* ========= Stable client id ========= */
     const CID_KEY = "storytag_client_id";
     function getClientId(){ let cid=localStorage.getItem(CID_KEY); if(!cid){ cid="c_"+Math.random().toString(36).slice(2,12); localStorage.setItem(CID_KEY,cid);} return cid; }
@@ -451,7 +453,7 @@ async function handleColourChange(){
         const val = snap.val() || {};
         const players = val.players || {};
         const words = Array.isArray(val.words) ? val.words : [];
-        const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId);
+        let myUid = (loadLastSession()?.myUid) || null; if(!myUid){ myUid = Object.keys(players).find(u=>players[u]?.clientId===clientId); }
         if(!myUid) return;
 
         // Hard lock: if I've already posted any word, or DB says locked, do nothing
@@ -465,6 +467,21 @@ async function handleColourChange(){
 
         // Persist to my player record
         await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`),{ colour:hex, lastActive:Date.now() });
+        localColourChosen = true;
+        // Immediately enable input locally if it's my turn and I haven't written yet
+        const cturn = val.currentTurnUid;
+        const myWordsSoFar = words.reduce((n,w)=>n+((w&&w.by===myUid)?1:0),0);
+        if (cturn === myUid && myWordsSoFar === 0) {
+          submitBtn.disabled = false;
+          wordInput.disabled = false;
+          turnBanner.textContent = "It's your turn";
+        }
+        // Force-mark colour as chosen locally so gating can open immediately
+        if (!players[myUid]) players[myUid] = {};
+        players[myUid].colour = hex;
+        localColour[myUid] = hex;
+        setMyColourUI(hex);
+    
         // Immediately enable input locally if it's my turn and I haven't written yet
         const cturn = val.currentTurnUid;
         const myWordsSoFar = words.reduce((n,w)=>n+((w&&w.by===myUid)?1:0),0);
