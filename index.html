@@ -68,12 +68,7 @@
       #wordInput, #submitBtn { flex:1 1 100%; }
       .toolbar button { flex:1 1 calc(50% - 8px); }
     }
-  
-    .swatch.is-locked, .swatchInput:disabled + .swatch, input[type="color"]:disabled + .swatch { opacity:.6; filter:grayscale(0.2); cursor:not-allowed; }
-
-    .colourWrap.locked .swatch { opacity:.55; filter:grayscale(0.25); cursor:not-allowed; box-shadow:none; }
-    .colourWrap.locked .swatchInput { pointer-events:none; }
-</style>
+  </style>
 </head>
 <body>
   <div class="wrap">
@@ -259,21 +254,7 @@
 
     function setSavedHintText(sid){ const map=loadRememberMap(); savedHint.textContent=(sid&&map[sid])?"Saved on this device — password optional.":""; }
 
-    
-    // Colour rules: must choose before first word; lock after first word
-    function myWordCount(words, uid){ 
-      try { return (Array.isArray(words)?words:[]).reduce((n,w)=>n+((w&&w.by===uid)?1:0),0); } catch { return 0; } 
-    }
-    function setColourLocked(locked){
-      try{
-        const wrap = colourSwatch.parentElement;
-        colourPicker.disabled = !!locked;
-        wrap.classList.toggle('locked', !!locked);
-        colourSwatch.classList.toggle('is-locked', !!locked);
-        colourSwatch.title = locked ? "Colour locked for this session" : "Pick your colour";
-      }catch{}
-    }
-/* ========= Helpers ========= */
+    /* ========= Helpers ========= */
     // ---------- Turn helpers ----------
     function activePeerId(players, myUid){
       const now = Date.now();
@@ -407,7 +388,7 @@
         if (seatExists) {
           await update(myPlayerRef, { uid:myUid, clientId, name:myName, lastActive:Date.now() });
         } else {
-          await set(myPlayerRef, { uid:myUid, clientId, name:myName, joinedAt:serverTimestamp(), lastActive:Date.now() });
+          await set(myPlayerRef, { uid:myUid, clientId, name:myName, colour:defaultColour, joinedAt:serverTimestamp(), lastActive:Date.now() });
         }
         onDisconnect(myPlayerRef).remove();
         window.addEventListener("unload",()=>{ try{ navigator.sendBeacon && remove(myPlayerRef); }catch{} });
@@ -421,8 +402,8 @@
         sessionLabel.textContent=sid; youLabel.textContent=myName;
 
         // Set local/UI colour from server if present, else default
-        const myColourNow = (players[myUid]?.colour) || null;
-        if (myColourNow) { colourPicker.value = myColourNow; }
+        const myColourNow = (players[myUid]?.colour) || defaultColour;
+        colourPicker.value = myColourNow;
         localColour[myUid] = myColourNow;
         saveSessionColour(derivedKey, clientId, myColourNow);
         setMyColourUI(myColourNow);
@@ -486,54 +467,35 @@
           setUIConnected(ids.length>0);
           renderStory(words,mergedPlayers);
 
-          
-          
-          // Recover cturn if it points at a missing seat
-          if (cturn && !players[cturn]){
+          // If current turn points to a missing seat, recover
+          if(cturn && !players[cturn]){
             const fallback = activePeerId(players, myUid) || myUid;
             update(sesRef,{currentTurnUid:fallback});
             cturn = fallback;
           }
 
-          // Auto-pass to peer after my first word when peer is present (handles null or self)
+          // Decide if we should auto-pass the turn to the peer after your first word
           const last = words[words.length-1];
-          const shouldAutoPass = (ids.length >= 2) && last && (last.by === myUid) && (!cturn || cturn === myUid) && peerId;
+          const shouldAutoPass = (ids.length >= 2) && last && (last.by === myUid) && (cturn === myUid) && peerId;
           if (shouldAutoPass) {
-            cturn = peerId; // prevent "second go" locally
+            cturn = peerId; // update local view immediately so UI doesn't grant you another turn
             update(sesRef,{currentTurnUid:peerId});
           }
 
-          // Enforce colour rules: must pick before first word; lock after first word
-          const myWordsSoFar = myWordCount(words, myUid);
-          const colourChosen = !!(players?.[myUid]?.colour);
-          const locked = (myWordsSoFar > 0) || !!(players?.[myUid]?.colourLocked);
-          setColourLocked(locked);
-
-          // If it's my turn but I haven't chosen a colour yet, block typing
-          if (cturn === myUid && !colourChosen) {
-            submitBtn.disabled = true;
-            wordInput.disabled = true;
-            turnBanner.textContent = "Pick your colour to start";
+          // Now update the banner/buttons based on the (possibly updated) cturn
+          if(ids.length<2 && words.length>0){
+            submitBtn.disabled=true;
+            wordInput.disabled=true;
+            turnBanner.textContent="Waiting for partner…";
           } else {
-            if(ids.length<2 && words.length>0){
-              submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…";
-            } else {
-              setTurnBanner(cturn,players,myUid);
-            }
+            setTurnBanner(cturn,players,myUid);
           }
 
           const isMyTurn=(cturn===myUid)&&(ids.length===2);
           if(wasMyTurn===false && isMyTurn) playTurnSound();
           wasMyTurn=isMyTurn;
 
-          // Ensure lock after first word (idempotent)
-          try {
-            const myWordsSoFar2 = myWordCount(words, myUid);
-            if (myWordsSoFar2 > 0 && !players?.[myUid]?.colourLocked) {
-              await update(ref(db,`sessions/${derivedKey}/players/${myUid}`), { colourLocked: true });
-            }
-          } catch {}
-    saveLocal({sessionId:sid,myName});saveLocal({sessionId:sid,myName});
+          saveLocal({sessionId:sid,myName});
         });
 
         if(!auto){ wordInput.focus(); joinStatus.innerHTML='<span class="ok">Ready!</span>'; }
@@ -561,12 +523,6 @@
         const last=loadLastSession(); if(!last) return;
         const sesRef=ref(db,`sessions/${last.derivedKey}`); const snap=await get(sesRef);
         const players=(snap.val()&&snap.val().players)||{}; const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId);
-        if(players[myUid]?.colourLocked){
-          // Revert UI to effective colour and exit
-          const eff = (players?.[myUid]?.colour) || (Array.isArray((snap.val()||{}).words)? (function(){const w=(snap.val().words||[]); for(let i=w.length-1;i>=0;i--){ if(w[i]&&w[i].by===myUid&&w[i].c) return w[i].c; } return null;})() : null) || savedSessionColour || localColour[myUid] || colourPicker.value;
-          if(eff){ colourPicker.value = eff; setMyColourUI(eff); setDotColour(youDot, eff, true); }
-          return;
-        }
         const hex=colourPicker.value;
 
         // Instant UI
@@ -591,18 +547,15 @@
       const players=ses.players||{}; const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId);
       if(!myUid){ errorBox.textContent="Rejoin required."; return; }
       if(ses.currentTurnUid!==myUid){ errorBox.textContent="Not your turn yet."; wordInput.value=""; return; }
-      if(!players[myUid]?.colour){ errorBox.textContent="Pick your colour first."; return; }
       if(!WORD_RX.test(word)){ errorBox.textContent="Invalid word. Use letters, apostrophes, hyphens, optional .,!? at end."; return; }
 
       const words=Array.isArray(ses.words)?ses.words:[]; const peerUid=activePeerId(players, myUid);
       const myColourNow=(players[myUid]?.colour)||localColour[myUid]||colourPicker.value||"#c6cdff";
 
       try{
-        const wasFirst = words.every(w => !w || w.by !== myUid);
         await update(sesRef,{
           words:[...words,{ w:titleCaseFirstWordIfNeeded(words.length,word), by:myUid, c:myColourNow, t:Date.now() }],
-          currentTurnUid: peerUid || null,
-          players: wasFirst ? { ...players, [myUid]: { ...(players[myUid]||{}), colourLocked: true } } : players
+          currentTurnUid: peerUid || myUid
         });
         wordInput.value="";
         if(!peerUid){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
