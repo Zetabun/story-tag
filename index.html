@@ -465,6 +465,15 @@ async function handleColourChange(){
 
         // Persist to my player record
         await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`),{ colour:hex, lastActive:Date.now() });
+        // Immediately enable input locally if it's my turn and I haven't written yet
+        const cturn = val.currentTurnUid;
+        const myWordsSoFar = words.reduce((n,w)=>n+((w&&w.by===myUid)?1:0),0);
+        if (cturn === myUid && myWordsSoFar === 0) {
+          submitBtn.disabled = false;
+          wordInput.disabled = false;
+          turnBanner.textContent = "It's your turn";
+        }
+
       }catch(e){ console.error(e); }
     }
 
