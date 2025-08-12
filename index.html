@@ -255,6 +255,34 @@
     function setSavedHintText(sid){ const map=loadRememberMap(); savedHint.textContent=(sid&&map[sid])?"Saved on this device — password optional.":""; }
 
     /* ========= Helpers ========= */
+    // ---------- Turn helpers ----------
+    function activePeerId(players, myUid){
+      const now = Date.now();
+      const ids = Object.keys(players||{}).filter(u => u !== myUid);
+      if (!ids.length) return null;
+      // Sort by lastActive desc
+      ids.sort((a,b)=>((players[b]?.lastActive||0) - (players[a]?.lastActive||0)));
+      // Prefer a recently active peer; otherwise, take the most recent seat
+      const fresh = ids.find(u => (now - (players[u]?.lastActive||0)) < STALE_MS);
+      return fresh || ids[0];
+    }
+    async function pruneExtraSeatsIfAny(dbRef, players, myUid){
+      const ids = Object.keys(players||{});
+      if (ids.length <= 2) return;
+      const now = Date.now();
+      // Remove oldest stale seats first (excluding my own seat)
+      const candidates = ids.filter(u => u !== myUid).sort(
+        (a,b)=>((players[a]?.lastActive||0) - (players[b]?.lastActive||0))
+      );
+      for (const uid of candidates){
+        const isStale = (now - (players[uid]?.lastActive||0)) > STALE_MS;
+        if (isStale && Object.keys(players).length > 2){
+          try { await remove(ref(dbRef, `players/${uid}`)); } catch {}
+          delete players[uid];
+        }
+      }
+    }
+
     const WORD_RX=/^[A-Za-z]+(?:['-][A-Za-z]+)*(?:[.,!?])?$/;
     const titleCaseFirstWordIfNeeded=(i,w)=>(i===0&&w.length)?w[0].toUpperCase()+w.slice(1):w;
     const setUIConnected=b=>statusDot.textContent=b?"Connected":"Offline";
@@ -384,11 +412,15 @@
         if(window._unsub) window._unsub();
         window._unsub=onValue(sesRef,s=>{
           const val=s.val()||{}; const players=val.players||{}; const words=val.words||[]; let cturn=val.currentTurnUid;
-          const ids=Object.keys(players); const peerId=ids.find(k=>k!==myUid);
+          const ids=Object.keys(players);
+          const peerId=activePeerId(players, myUid);
 
           const meP=presenceOf(players[myUid]?.lastActive); const peP=presenceOf(players[peerId]?.lastActive);
           youPresence.className=`presence ${meP.cls}`; youPresence.textContent=meP.label;
           peerPresence.className=`presence ${peP.cls}`; peerPresence.textContent=peP.label;
+
+          // Prune extra stale seats if they exist (more than 2)
+          pruneExtraSeatsIfAny(ref(db,`sessions/${derivedKey}`), players, myUid);
 
           // Find the most recent word by me and use its colour as a fallback
           function lastWordColourBy(uid, wordsArr){
@@ -497,7 +529,7 @@
       if(ses.currentTurnUid!==myUid){ errorBox.textContent="Not your turn yet."; wordInput.value=""; return; }
       if(!WORD_RX.test(word)){ errorBox.textContent="Invalid word. Use letters, apostrophes, hyphens, optional .,!? at end."; return; }
 
-      const words=Array.isArray(ses.words)?ses.words:[]; const peerUid=Object.keys(players).find(k=>k!==myUid);
+      const words=Array.isArray(ses.words)?ses.words:[]; const peerUid=activePeerId(players, myUid);
       const myColourNow=(players[myUid]?.colour)||localColour[myUid]||colourPicker.value||"#c6cdff";
 
       try{
