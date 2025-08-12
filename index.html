@@ -467,13 +467,33 @@
           setUIConnected(ids.length>0);
           renderStory(words,mergedPlayers);
 
-          if(cturn && !players[cturn] && ids.length>0){ const newTurn=ids[0]; update(sesRef,{currentTurnUid:newTurn}); cturn=newTurn; }
-          if(ids.length<2 && words.length>0){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
-          else setTurnBanner(cturn,players,myUid);
+          // If current turn points to a missing seat, recover
+          if(cturn && !players[cturn]){
+            const fallback = activePeerId(players, myUid) || myUid;
+            update(sesRef,{currentTurnUid:fallback});
+            cturn = fallback;
+          }
 
-          const last=words[words.length-1]; const isMyTurn=(cturn===myUid)&&(ids.length===2);
-          if(ids.length===2 && last && last.by===myUid && cturn===myUid && peerId){ update(sesRef,{currentTurnUid:peerId}); }
-          if(wasMyTurn===false && isMyTurn) playTurnSound(); wasMyTurn=isMyTurn;
+          // Decide if we should auto-pass the turn to the peer after your first word
+          const last = words[words.length-1];
+          const shouldAutoPass = (ids.length >= 2) && last && (last.by === myUid) && (cturn === myUid) && peerId;
+          if (shouldAutoPass) {
+            cturn = peerId; // update local view immediately so UI doesn't grant you another turn
+            update(sesRef,{currentTurnUid:peerId});
+          }
+
+          // Now update the banner/buttons based on the (possibly updated) cturn
+          if(ids.length<2 && words.length>0){
+            submitBtn.disabled=true;
+            wordInput.disabled=true;
+            turnBanner.textContent="Waiting for partner…";
+          } else {
+            setTurnBanner(cturn,players,myUid);
+          }
+
+          const isMyTurn=(cturn===myUid)&&(ids.length===2);
+          if(wasMyTurn===false && isMyTurn) playTurnSound();
+          wasMyTurn=isMyTurn;
 
           saveLocal({sessionId:sid,myName});
         });
