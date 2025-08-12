@@ -400,6 +400,12 @@
           localColour[myUid] = myEffectiveColour;
           setMyColourUI(myEffectiveColour);
           setDotColour(youDot, myEffectiveColour, !!mergedPlayers[myUid]);
+          // If server doesn't have my colour yet, persist it once to players/<myUid>
+          const serverHasColour = !!(players?.[myUid]?.colour);
+          if (!serverHasColour && myEffectiveColour) {
+            try { update(ref(db,`sessions/${sidKey||derivedKey}/players/${myUid}`), { colour: myEffectiveColour }); } catch {}
+          }
+
 
           setDotColour(peerDot, mergedPlayers[peerId]?.colour, !!mergedPlayers[peerId]);
 
