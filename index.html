@@ -340,7 +340,7 @@
         if (seatExists) {
           await update(myPlayerRef, { uid:myUid, clientId, name:myName, lastActive:Date.now() });
         } else {
-          await set(myPlayerRef, { uid:myUid, clientId, name:myName, colour:defaultColour, joinedAt:serverTimestamp(), lastActive:Date.now() });
+          await set(myPlayerRef, { uid:myUid, clientId, name:myName, joinedAt:serverTimestamp(), lastActive:Date.now() });
         }
         onDisconnect(myPlayerRef).remove();
         window.addEventListener("unload",()=>{ try{ navigator.sendBeacon && remove(myPlayerRef); }catch{} });
@@ -358,10 +358,12 @@
         wordInput.disabled = true;
 
         // Set local/UI colour from server if present, else default
-        const myColourNow = (players[myUid]?.colour) || defaultColour;
-        colourPicker.value = myColourNow;
-        localColour[myUid] = myColourNow;
-        setMyColourUI(myColourNow);
+        const myColourNow = (players[myUid]?.colour) || null;
+        if (myColourNow) {
+          colourPicker.value = myColourNow;
+          localColour[myUid] = myColourNow;
+          setMyColourUI(myColourNow);
+        }
 
         // Subscribe to session
         if(window._unsub) window._unsub();
@@ -391,8 +393,13 @@
           renderStory(words,mergedPlayers);
 
           if(cturn && !players[cturn] && ids.length>0){ const newTurn=ids[0]; update(sesRef,{currentTurnUid:newTurn}); cturn=newTurn; }
-          if(ids.length<2 && words.length>0){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
-          else setTurnBanner(cturn,players,myUid);
+          if (cturn===myUid && !players[myUid]?.colour) {
+          submitBtn.disabled = true;
+          wordInput.disabled = true;
+          turnBanner.textContent = "Pick your colour to start";
+        } else if(ids.length<2 && words.length>0){
+          submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…";
+        } else setTurnBanner(cturn,players,myUid);
 
           const last=words[words.length-1]; const isMyTurn=(cturn===myUid)&&(ids.length===2);
           if(ids.length===2 && last && last.by===myUid && cturn===myUid && peerId){ update(sesRef,{currentTurnUid:peerId}); }
@@ -450,6 +457,7 @@
       const players=ses.players||{}; const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId);
       if(!myUid){ errorBox.textContent="Rejoin required."; return; }
       if(ses.currentTurnUid!==myUid){ errorBox.textContent="Not your turn yet."; wordInput.value=""; return; }
+      if(!players[myUid]?.colour){ errorBox.textContent="Pick your colour first."; return; }
       if(!WORD_RX.test(word)){ errorBox.textContent="Invalid word. Use letters, apostrophes, hyphens, optional .,!? at end."; return; }
 
       const words=Array.isArray(ses.words)?ses.words:[]; const peerUid=Object.keys(players).find(k=>k!==myUid);
