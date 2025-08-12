@@ -479,52 +479,52 @@ function attachFirstWordLockWatcher(derivedKey, myUid){
 /* ========= Colour change: update UI instantly, then DB ========= */
     
 async function handleColourChange(){
-      try{
-        const last=loadLastSession(); if(!last) return;
-        const sesRef=ref(db,`sessions/${last.derivedKey}`);
-        const snap=await get(sesRef);
-        const val = snap.val() || {};
-        const players = val.players || {};
-        const words = Array.isArray(val.words) ? val.words : [];
-        let myUid = (loadLastSession()?.myUid) || null; if(!myUid){ myUid = Object.keys(players).find(u=>players[u]?.clientId===clientId); }
-        if(!myUid) return;
+  try{
+    const last = loadLastSession();
+    if (!last) return;
 
-        // Hard lock: if I've already posted any word, or DB says locked, do nothing
-        const hasMyWord = words.some(w => w && w.by === myUid);
-        if(players[myUid]?.colourLocked || hasMyWord){ return; }
+    const sesRef = ref(db, `sessions/${last.derivedKey}`);
+    const snap = await get(sesRef);
+    const val = snap.val() || {};
+    const players = val.players || {};
+    const words = Array.isArray(val.words) ? val.words : [];
 
-        const hex=colourPicker.value;
-
-        // Instant UI
-        localColour[myUid]=hex; try{ saveSessionColour(last.derivedKey, clientId, hex); }catch{} saveSessionColour(last.derivedKey, clientId, hex); saveSessionColour(last.derivedKey, clientId, hex); setMyColourUI(hex); setDotColour(youDot,hex,true);
-
-        // Persist to my player record
-        await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`),{ colour:hex, lastActive:Date.now() });
-        localColourChosen = true;
-        // Immediately enable input locally if it's my turn and I haven't written yet
-        const cturnLocal = val.currentTurnUid;
-        const myWordsSoFar = words.reduce((n,w)=>n+((w&&w.by===myUid)?1:0),0);
-        if (cturnLocal === myUid && myWordsSoFar === 0) {
-          submitBtn.disabled = false;
-          wordInput.disabled = false;
-          turnBanner.textContent = "It's your turn";
-        }
-        // Force-mark colour as chosen locally so gating can open immediately
-        if (!players[myUid]) players[myUid] = {};
-        players[myUid].colour = hex;
-        localColour[myUid] = hex;
-        try{ saveSessionColour(last.derivedKey, clientId, hex); }catch{} setMyColourUI(hex);
-    
-        // Immediately enable input locally if it's my turn and I haven't written yet
-        /* cturnLocal (dup) removed */
-        const my/* myWordsSoFar (dup) removed */ if (cturnLocal === myUid && myWordsSoFar === 0) {
-          submitBtn.disabled = false;
-          wordInput.disabled = false;
-          turnBanner.textContent = "It's your turn";
-        }
-
-      }catch(e){ console.error(e); }
+    let myUid = (loadLastSession()?.myUid) || null;
+    if (!myUid) {
+      myUid = Object.keys(players).find(u => players[u]?.clientId === clientId);
     }
+    if (!myUid) return;
+
+    // If I've already posted a word, or DB says locked, do nothing
+    const hasMyWord = words.some(w => w && w.by === myUid);
+    if (players[myUid]?.colourLocked || hasMyWord) return;
+
+    const hex = colourPicker.value;
+
+    // Instant UI + cache
+    localColour[myUid] = hex;
+    try { saveSessionColour(last.derivedKey, clientId, hex); } catch {}
+    setMyColourUI(hex);
+    setDotColour(youDot, hex, true);
+
+    // Persist to my player record
+    await update(ref(db, `sessions/${last.derivedKey}/players/${myUid}`), {
+      colour: hex,
+      lastActive: Date.now()
+    });
+
+    // If it's my turn and I haven't written yet, enable input locally
+    const cturnLocal = val.currentTurnUid;
+    const myWordsSoFar = words.reduce((n, w) => n + ((w && w.by === myUid) ? 1 : 0), 0);
+    if (cturnLocal === myUid && myWordsSoFar === 0) {
+      submitBtn.disabled = false;
+      wordInput.disabled = false;
+      turnBanner.textContent = "It's your turn";
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
 
     colourPicker.addEventListener("input",handleColourChange);
     colourPicker.addEventListener("change",handleColourChange);
