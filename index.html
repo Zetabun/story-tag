@@ -114,7 +114,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
       getDatabase, ref, get, set, update, onValue, serverTimestamp,
-      onDisconnect, runTransaction
+      onDisconnect, runTransaction, remove
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
     // === Your Firebase config (with databaseURL) ===
@@ -280,7 +280,7 @@
         const snap = await get(sesRef);
         let players = (snap.val() && snap.val().players) || {};
 
-        // Enforce max 2 players
+        // Enforce max 2 players (current seats, not history)
         const playerIds = Object.keys(players);
         if (playerIds.length >= 2) {
           joinStatus.innerHTML = '<span class="err">Session is full (2/2)</span>';
@@ -306,6 +306,8 @@
           });
         }
 
+        const myPlayerRef = ref(db, `sessions/${sessionId}/players/${myUid}`);
+
         // Add me as a player
         await update(ref(db, `sessions/${sessionId}/players`), {
           [myUid]: {
@@ -316,8 +318,8 @@
           }
         });
 
-        // Presence handling
-        onDisconnect(ref(db, `sessions/${sessionId}/players/${myUid}/online`)).set(false);
+        // Presence handling — remove my seat on disconnect so a new player can join
+        onDisconnect(myPlayerRef).remove();
 
         // Safety: transaction to prevent race > 2 players
         await runTransaction(ref(db, `sessions/${sessionId}/players`), (current) => {
@@ -335,11 +337,11 @@
 
         // Subscribe to session changes
         if (unsubSession) unsubSession();
-        unsubSession = onValue(sesRef, (s) => {
+        unsubSession = onValue(sesRef, async (s) => {
           const val = s.val() || {};
           const players = val.players || {};
           const words = val.words || [];
-          const cturn = val.currentTurnUid;
+          let cturn = val.currentTurnUid;
           const playerIdsNow = Object.keys(players);
 
           // Resolve peer name
@@ -348,17 +350,22 @@
           peerLabel.textContent = peerName || "(none)";
 
           // Online dots
-          setDot(youDot, players[myUid]?.online);
-          setDot(peerDot, peerId ? players[peerId]?.online : false);
+          setDot(youDot, !!players[myUid]);
+          setDot(peerDot, !!players[peerId]);
 
           // Connection-ish indicator
-          const anyOnline = Object.values(players).some(p => p && p.online);
-          setUIConnected(anyOnline);
+          setUIConnected(playerIdsNow.length > 0);
 
           renderStory(words);
 
+          // --- If currentTurnUid belongs to a missing player, reassign turn to whoever is present
+          if (cturn && !players[cturn] && playerIdsNow.length > 0) {
+            const newTurn = playerIdsNow[0];
+            update(sesRef, { currentTurnUid: newTurn });
+            cturn = newTurn;
+          }
+
           // --- SOLO LOCK LOGIC ---
-          // If only 1 player and there is at least 1 word, grey out input and wait
           if (playerIdsNow.length < 2 && words.length > 0) {
             submitBtn.disabled = true;
             wordInput.disabled = true;
@@ -369,7 +376,6 @@
           }
 
           // --- AUTO-HANDOFF WHEN PARTNER ARRIVES ---
-          // If two players are present now, last word was mine, and turn still on me, hand off to peer.
           const last = words[words.length - 1];
           if (playerIdsNow.length === 2 && last && last.by === myUid && cturn === myUid && peerId) {
             update(sesRef, { currentTurnUid: peerId });
@@ -377,15 +383,8 @@
 
           // Turn sound: play when it becomes your turn and there are two players
           const isMyTurn = (cturn === myUid) && (playerIdsNow.length === 2);
-          if (wasMyTurn === false && isMyTurn) {
-            playTurnSound();
-          }
-          if (wasMyTurn === null) {
-            // Initialize state without sound on first render
-            wasMyTurn = isMyTurn;
-          } else {
-            wasMyTurn = isMyTurn;
-          }
+          if (wasMyTurn === false && isMyTurn) playTurnSound();
+          if (wasMyTurn === null) wasMyTurn = isMyTurn; else wasMyTurn = isMyTurn;
 
           // Save local snapshot for resume
           saveLocal({ sessionId, myUid, myName });
@@ -422,7 +421,7 @@
       const playerIds = Object.keys(players);
       const peerUid = playerIds.find(k => k !== myUid);
 
-      // Must be my turn (unless it's the very first word and I'm solo and I already have the turn)
+      // Must be my turn
       if (ses.currentTurnUid !== myUid) {
         errorBox.textContent = "Not your turn yet.";
         wordInput.value = "";
@@ -437,7 +436,6 @@
       word = titleCaseFirstWordIfNeeded(words.length, word);
 
       try {
-        // If no partner yet: keep turn set to me, but immediately grey out locally.
         const nextTurnUid = peerUid || myUid;
 
         await update(sesRef, {
@@ -479,7 +477,8 @@
     leaveBtn.onclick = async () => {
       try {
         if (sessionId && myUid) {
-          await update(ref(db, `sessions/${sessionId}/players/${myUid}`), { online: false });
+          // Remove my seat so a new player can join
+          await remove(ref(db, `sessions/${sessionId}/players/${myUid}`));
         }
       } catch {}
       location.reload();
@@ -496,7 +495,7 @@
   </script>
 
   <!-- Optional: tiny footer with a friendly note -->
-  <div style="position:fixed;bottom:10px;left:50%;transform:translateX(-50%);font-size:12px;color:#9aa3d7;transform:translateX(-50%);">
+  <div style="position:fixed;bottom:10px;left:50%;transform:translateX(-50%);font-size:12px;color:#9aa3d7;">
     Built for fun — share your Session ID with a friend and take turns!
   </div>
 </body>
