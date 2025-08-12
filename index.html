@@ -392,47 +392,38 @@
 
           setUIConnected(ids.length>0);
           renderStory(words,mergedPlayers);
-          // Resolve turn deterministically to avoid "both think it's the other's turn"
-          // Rules:
-          //  - If two players and there are words, next turn is the player who did NOT write the last word.
-          //  - If two players and no words yet, pick a stable first turn (earliest joinedAt; fallback lexical UID).
-          //  - If currentTurnUid points to a missing player, reset it deterministically.
-          (async ()=>{
-            try{
-              const ids = Object.keys(players);
-              if(ids.length===2){
-                const last = words[words.length-1] || null;
-                let desired = cturn && players[cturn] ? cturn : null;
-
-                if(last){
-                  const next = ids.find(k=>k!==last.by) || null;
-                  if(next) desired = next;
-                } else {
-                  const [a,b]=ids;
-                  const ja = players[a]?.joinedAt||0, jb = players[b]?.joinedAt||0;
-                  if(ja && jb) desired = (ja<=jb)?a:b;
-                  else desired = [a,b].sort()[0];
-                }
-
-                if(!desired || !players[desired]){
-                  // Fallback to a stable choice if something is odd
-                  desired = ids.sort()[0];
-                }
-
-                if(cturn !== desired){
-                  cturn = desired;
-                  await update(sesRef,{ currentTurnUid: desired });
-                }
+          // Resolve turn deterministically and use that immediately for UI
+// Rules:
+//  - If two players and there are words, next turn is the player who did NOT write the last word.
+//  - If two players and no words yet, pick a stable first turn (earliest joinedAt; fallback lexical UID).
+//  - If currentTurnUid points to a missing player, reset it deterministically.
+          let viewTurn = cturn;
+          try{
+            const ids = Object.keys(players);
+            if(ids.length===2){
+              const last = words[words.length-1] || null;
+              let desired = cturn && players[cturn] ? cturn : null;
+              if(last){
+                const next = ids.find(k=>k!==last.by) || null;
+                if(next) desired = next;
+              } else {
+                const [a,b]=ids; const ja = players[a]?.joinedAt||0, jb = players[b]?.joinedAt||0;
+                desired = (ja && jb) ? ((ja<=jb)?a:b) : [a,b].sort()[0];
               }
-            }catch{}
-          })();
-
-
-          if(cturn && !players[cturn] && ids.length>0){ const newTurn=ids[0]; update(sesRef,{currentTurnUid:newTurn}); cturn=newTurn; }
+              if(!desired || !players[desired]) desired = ids.sort()[0];
+              viewTurn = desired;
+              if(cturn !== desired){ cturn = desired; update(sesRef,{ currentTurnUid: desired }).catch(()=>{}); }
+            }
+          }catch{}
+if(cturn && !players[cturn] && ids.length>0){ const newTurn=ids[0]; update(sesRef,{currentTurnUid:newTurn}); cturn=newTurn; }
           if(ids.length<2 && words.length>0){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
-          else setTurnBanner(cturn,players,myUid);
+          else setTurnBanner(viewTurn,players,myUid);
 
-          const isMyTurn=(cturn===myUid)&&(ids.length===2);
+          const isMyTurn=(viewTurn===myUid)&&(ids.length===2);
+          // Enforce button state based on turn
+          submitBtn.disabled = !isMyTurn;
+          wordInput.disabled = !isMyTurn;
+
           if(wasMyTurn===false && isMyTurn) playTurnSound(); wasMyTurn=isMyTurn;
 
           saveLocal({sessionId:sid,myName});
@@ -493,7 +484,9 @@
 
 
         wordInput.value="";
-        if(!peerUid){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
+        // Disable locally until the next snapshot confirms turn swap
+        submitBtn.disabled = true; wordInput.disabled = true;
+        if(!peerUid){ turnBanner.textContent="Waiting for partner…"; }
       }catch(e){ console.error(e); errorBox.textContent="Submit failed — try again."; }
     };
 /* ========= Utilities ========= */
