@@ -1,4 +1,4 @@
-name: Bump version (patch) on push
+name: Bump version (patch with rollover)
 
 on:
   push:
@@ -18,19 +18,37 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Ensure version.json exists
+        run: |
+          if [ ! -f version.json ]; then
+            echo '{"version":"0.1.0"}' > version.json
+          fi
+
       - name: Read current version
         id: read
         run: |
-          if [ ! -f version.json ]; then echo '{"version":"0.1.0"}' > version.json; fi
           CURR=$(jq -r .version version.json | sed 's/^v//')
           echo "current=$CURR" >> $GITHUB_OUTPUT
 
-      - name: Bump patch
+      - name: Compute next version (patch w/ rollover)
         id: bump
         run: |
           IFS='.' read -r MA MI PA <<< "${{ steps.read.outputs.current }}"
-          : "${MA:=0}" ; : "${MI:=1}" ; : "${PA:=0}"
-          NEW="$MA.$MI.$((PA+1))"
+          MA=${MA:-0}; MI=${MI:-1}; PA=${PA:-0}
+
+          # bump patch
+          PA=$((PA + 1))
+          if [ "$PA" -gt 9 ]; then
+            PA=0
+            MI=$((MI + 1))
+          fi
+
+          if [ "$MI" -gt 9 ]; then
+            MI=0
+            MA=$((MA + 1))
+          fi
+
+          NEW="${MA}.${MI}.${PA}"
           jq -r --arg v "$NEW" '.version=$v' version.json > version.json.tmp && mv version.json.tmp version.json
           echo "new=$NEW" >> $GITHUB_OUTPUT
 
