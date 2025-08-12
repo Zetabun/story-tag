@@ -52,12 +52,15 @@
 
     .presence{ font-weight:600; } .online{ color:#69f0ae; } .away{ color:#ffd166; } .offline{ color:#b0b7e1; }
 
+    /* Footer chip (desktop only) */
     .footer-chip{
       position:fixed; bottom:calc(8px + env(safe-area-inset-bottom, 0px)); left:50%; transform:translateX(-50%);
       font-size:12px; color:#9aa3d7; background:rgba(23,26,43,0.92); border:1px solid #2a2f4a; border-radius:10px;
       padding:6px 10px; z-index:30; -webkit-backdrop-filter:saturate(130%) blur(6px); backdrop-filter:saturate(130%) blur(6px);
     }
+    @media (max-width: 768px) { .footer-chip { display:none !important; } }
 
+    /* Mobile tweaks */
     @media (max-width: 768px) {
       .row { gap:8px; }
       .pill { font-size:11px; padding:6px 8px; }
@@ -72,7 +75,7 @@
     <div class="card">
       <h1>
         Story Tag
-        <span class="version-label">Alpha <span id="buildVersion" class="version-badge">v0.1</span></span>
+        <span class="version-label">Alpha <span id="buildVersion" class="version-badge">v0.0.0</span></span>
       </h1>
       <p class="sub">Create a private session with an ID + password, then share both with a friend. Take turns adding one word to build a story.</p>
 
@@ -157,14 +160,23 @@
     </div>
   </div>
 
-  <!-- Footer -->
+  <!-- Footer (hidden on mobile) -->
   <div class="footer-chip">Built for fun — share your Session ID + Password with a friend and take turns!</div>
 
   <!-- App -->
   <script type="module">
-    /* ========= Version badge (bump here) ========= */
-    const BUILD_NUMBER = "v0.1";
-    document.getElementById("buildVersion").textContent = BUILD_NUMBER;
+    /* ========= Version badge from version.json ========= */
+    const VERSION_FALLBACK = "v0.0.0";
+    (async () => {
+      try {
+        const res = await fetch(`version.json?ts=${Date.now()}`, { cache: "no-store" });
+        const data = await res.json();
+        const v = (data && data.version ? data.version : VERSION_FALLBACK);
+        document.getElementById("buildVersion").textContent = `v${String(v).replace(/^v/i, "")}`;
+      } catch {
+        document.getElementById("buildVersion").textContent = VERSION_FALLBACK;
+      }
+    })();
 
     /* ========= Firebase ========= */
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -276,7 +288,7 @@
     (function(){ const s=loadLocal(); if(s.sessionId&&s.myName){ nameInput.value=s.myName; sessionInput.value=s.sessionId; setSavedHintText(s.sessionId);} })();
     sessionInput.addEventListener("input",()=>setSavedHintText(sessionInput.value.trim()));
 
-    // Join/create with reclaim + stale eviction
+    // Join/create with reclaim + stale eviction and NO colour overwrite if seat exists
     async function enterSession(mode, opts={}){
       const {auto=false}=opts; if(!auto) canPlaySound=true;
       joinStatus.textContent=""; const name=(opts.myNameOverride??nameInput.value).trim();
@@ -298,9 +310,11 @@
         if(mode==='create'&&exists){ if(!auto) joinStatus.innerHTML='<span class="warn">Session already exists. Use Join.</span>'; return; }
         if(mode==='join'&&!exists){ if(!auto) joinStatus.innerHTML='<span class="warn">No session found. Use Create.</span>'; return; }
 
+        // Reclaim or new uid
         let myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId) || ("u_"+Math.random().toString(36).slice(2,10));
         let myName=name;
 
+        // If full and not mine, evict stale (>60s)
         const seatCount=Object.keys(players).length;
         if(seatCount>=2 && !players[myUid]){
           const now=Date.now(); const staleUid=Object.keys(players).find(u=>(now-(players[u]?.lastActive||0))>STALE_MS);
@@ -308,27 +322,44 @@
           else { if(!auto) joinStatus.innerHTML='<span class="err">Session is full (2/2)</span>'; return; }
         }
 
+        // Create session if needed
         if(!exists&&mode==='create'){ await set(sesRef,{createdAt:serverTimestamp(),friendlyId:sid,words:[],currentTurnUid:myUid,players:{}}); }
         else if(exists&&!existing.friendlyId){ await update(sesRef,{friendlyId:existing.friendlyId||sid}); }
 
-        if(!players[myUid]&&Object.keys(players).length===1){
+        // Disambiguate names
+        if(!players[myUid] && Object.keys(players).length===1){
           const [other]=Object.keys(players);
           if(players[other]?.name?.trim().toLowerCase()===name.toLowerCase()) myName=`${name} (2)`;
         }
 
-        const defaultColour=colourPicker.value || `#${Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,"0")}`;
+        // --- Create/update player seat (DON'T overwrite colour if seat already exists) ---
+        const defaultColour= colourPicker.value || `#${Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,"0")}`;
         const myPlayerRef=ref(db,`sessions/${derivedKey}/players/${myUid}`);
-        await set(myPlayerRef,{ uid:myUid, clientId, name:myName, colour:players[myUid]?.colour||defaultColour, joinedAt:serverTimestamp(), lastActive:Date.now() });
+        const seatExists = !!players[myUid];
+
+        if (seatExists) {
+          await update(myPlayerRef, { uid:myUid, clientId, name:myName, lastActive:Date.now() });
+        } else {
+          await set(myPlayerRef, { uid:myUid, clientId, name:myName, colour:defaultColour, joinedAt:serverTimestamp(), lastActive:Date.now() });
+        }
         onDisconnect(myPlayerRef).remove();
         window.addEventListener("unload",()=>{ try{ navigator.sendBeacon && remove(myPlayerRef); }catch{} });
 
+        // Local remember
         if(!auto&&rememberChk.checked){ const map=loadRememberMap(); map[sid]=derivedKey; saveRememberMap(map); setSavedHintText(sid); }
         saveLastSession({sessionId:sid,derivedKey,myName});
 
+        // UI switch
         auth.style.display="none"; game.style.display="block";
         sessionLabel.textContent=sid; youLabel.textContent=myName;
-        colourPicker.value=players[myUid]?.colour||defaultColour; localColour[myUid]=colourPicker.value; setMyColourUI(colourPicker.value);
 
+        // Set local/UI colour from server if present, else default
+        const myColourNow = (players[myUid]?.colour) || defaultColour;
+        colourPicker.value = myColourNow;
+        localColour[myUid] = myColourNow;
+        setMyColourUI(myColourNow);
+
+        // Subscribe to session
         if(window._unsub) window._unsub();
         window._unsub=onValue(sesRef,s=>{
           const val=s.val()||{}; const players=val.players||{}; const words=val.words||[]; let cturn=val.currentTurnUid;
@@ -338,12 +369,19 @@
           youPresence.className=`presence ${meP.cls}`; youPresence.textContent=meP.label;
           peerPresence.className=`presence ${peP.cls}`; peerPresence.textContent=peP.label;
 
+          // Merge local colour to avoid flicker
           const mergedPlayers=JSON.parse(JSON.stringify(players||{}));
           if(localColour[myUid]){ mergedPlayers[myUid]=mergedPlayers[myUid]||{}; mergedPlayers[myUid].colour=localColour[myUid]; }
           peerLabel.textContent=peerId?(players[peerId]?.name||"Partner"):"(none)";
-          setDotColour(youDot,mergedPlayers[myUid]?.colour,!!mergedPlayers[myUid]);
-          setDotColour(peerDot,mergedPlayers[peerId]?.colour,!!mergedPlayers[peerId]);
-          setMyColourUI(mergedPlayers[myUid]?.colour);
+
+          // Sync picker & dots to server colour
+          const myColourFromServer = mergedPlayers[myUid]?.colour;
+          if (myColourFromServer && colourPicker.value.toLowerCase() !== myColourFromServer.toLowerCase()) {
+            colourPicker.value = myColourFromServer;
+          }
+          setMyColourUI(myColourFromServer);
+          setDotColour(youDot, myColourFromServer, !!mergedPlayers[myUid]);
+          setDotColour(peerDot, mergedPlayers[peerId]?.colour, !!mergedPlayers[peerId]);
 
           setUIConnected(ids.length>0);
           renderStory(words,mergedPlayers);
@@ -361,9 +399,10 @@
 
         if(!auto){ wordInput.focus(); joinStatus.innerHTML='<span class="ok">Ready!</span>'; }
 
+        // Presence heartbeat + on interaction
         if(window._presenceTimer) clearInterval(window._presenceTimer);
-        window._presenceTimer=setInterval(()=>{ update(ref(db,`sessions/${derivedKey}/players/${myUid}`),{lastActive:Date.now()}).catch(()=>{}); },10000);
-        const bump=()=>update(ref(db,`sessions/${derivedKey}/players/${myUid}`),{lastActive:Date.now()}).catch(()=>{});
+        window._presenceTimer=setInterval(()=>{ update(ref(db,`sessions/${derivedKey}/players/${myUid}`), { lastActive: Date.now() }).catch(()=>{}); },10000);
+        const bump=()=>update(ref(db,`sessions/${derivedKey}/players/${myUid}`),{ lastActive: Date.now() }).catch(()=>{});
         ["click","keydown","touchstart","visibilitychange"].forEach(ev=>document.addEventListener(ev,bump,{passive:true}));
 
       }catch(e){
