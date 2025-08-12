@@ -13,8 +13,7 @@
     p.sub { margin:0 0 18px; color:#b9c0ff; }
     .grid { display:grid; gap:12px; grid-template-columns: 1fr; }
     label { font-size:14px; color:#b9c0ff; }
-    input[type="text"], input[type="color"] { padding:12px 14px; border-radius:10px; border:1px solid #303659; background:#0f1328; color:#fff; }
-    input[type="text"] { width:100%; }
+    input[type="text"] { width:100%; padding:12px 14px; border-radius:10px; border:1px solid #303659; background:#0f1328; color:#fff; }
     input[type="text"]::placeholder { color:#8890b3; }
     input[disabled] { opacity:.6; }
     button { padding:12px 16px; border-radius:10px; border:1px solid #39406a; background:#2a2f4a; color:#fff; cursor:pointer; transition:.15s transform ease; }
@@ -33,14 +32,19 @@
     .nameTag { font-weight:700; }
     .small { font-size:12px; color:#9aa3d7; }
     .divider { height:1px; background:#2a2f4a; margin:14px 0; }
-    /* Online dots */
+    /* Dots + tags */
     .tag { display:inline-flex; align-items:center; gap:6px; }
     .dot { width:8px; height:8px; border-radius:50%; background:#666; box-shadow: 0 0 0 1px rgba(255,255,255,.12) inset; }
-    .dot.online { background:#69f0ae; }
-    .dot.away { background:#ffd166; }
-    /* Coloured word rendering */
+    /* word colour spans */
     .word { display:inline; }
-    .word + .word::before { content: " "; } /* add spaces between words */
+    .word + .word::before { content: " "; }
+    /* swatch */
+    .swatch{
+      width:28px; height:14px; border-radius:7px;
+      border:1px solid #2a2f4a; background:#58a6ff;
+      display:inline-block; vertical-align:middle; cursor:pointer;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+    }
   </style>
 </head>
 <body>
@@ -84,7 +88,8 @@
           <div class="pill">Status: <span id="statusDot">Waiting…</span></div>
           <div class="pill">
             Colour:
-            <input id="colourPicker" type="color" value="#58a6ff" title="Pick your colour" />
+            <span id="colourSwatch" class="swatch" title="Pick your colour"></span>
+            <input id="colourPicker" type="color" value="#58a6ff" style="position:absolute;left:-9999px;" />
           </div>
         </div>
 
@@ -147,7 +152,7 @@
           wordCount = $("wordCount"), statusDot = $("statusDot"),
           storyBox = $("storyBox"), turnBanner = $("turnBanner"),
           wordInput = $("wordInput"), submitBtn = $("submitBtn"),
-          colourPicker = $("colourPicker"),
+          colourPicker = $("colourPicker"), colourSwatch = $("colourSwatch"),
           copyBtn = $("copyBtn"), downloadBtn = $("downloadBtn"), leaveBtn = $("leaveBtn"),
           errorBox = $("errorBox");
 
@@ -163,35 +168,34 @@
     // Word regex (letters, apostrophes, hyphens, optional trailing .,!?)
     const WORD_RX = /^[A-Za-z]+(?:['-][A-Za-z]+)*(?:[.,!?])?$/;
 
-    // Utilities
-    function titleCaseFirstWordIfNeeded(i, word) {
-      if (i === 0 && word.length) return word[0].toUpperCase() + word.slice(1);
-      return word;
-    }
+    // Utils
+    function titleCaseFirstWordIfNeeded(i, word) { return (i === 0 && word.length) ? word[0].toUpperCase() + word.slice(1) : word; }
     function setUIConnected(connected) { statusDot.textContent = connected ? "Connected" : "Offline"; }
     function escapeHtml(s) { return (s || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
-    function setDot(el, online) { el.classList.toggle("online", !!online); el.classList.toggle("away", !online); }
+    function setDotColour(el, colour, present) {
+      el.style.background = present ? (colour || "#666") : "#666";
+      el.style.boxShadow = present ? "0 0 0 1px rgba(255,255,255,.12) inset" : "0 0 0 1px rgba(255,255,255,.12) inset";
+    }
+    function setMyColourUI(hex){
+      if (!hex) return;
+      colourSwatch.style.background = hex;
+      youDot.style.background = hex; // tint your dot to match your chosen colour
+    }
 
-    // Render story with coloured spans
+    // Render story as coloured spans
     function renderStory(words, players) {
-      storyBox.innerHTML = ""; // rebuild
-      if (!words.length) {
-        storyBox.textContent = "(No words yet—be the first to write!)";
-        wordCount.textContent = "0";
-        return;
-      }
+      storyBox.innerHTML = "";
+      if (!words.length) { storyBox.textContent = "(No words yet—be the first to write!)"; wordCount.textContent = "0"; return; }
       for (const w of words) {
         const span = document.createElement("span");
         span.className = "word";
-        const colour = players?.[w.by]?.colour || "#c6cdff";
-        span.style.color = colour;
-        span.textContent = w.w; // safe text
+        span.style.color = players?.[w.by]?.colour || "#c6cdff";
+        span.textContent = w.w;
         storyBox.appendChild(span);
       }
       wordCount.textContent = String(words.length);
     }
 
-    // Turn banner + enable/disable
     function setTurnBanner(currentTurnUid, players) {
       if (!players || !players[myUid]) { turnBanner.textContent = "Waiting…"; return; }
       const mine = currentTurnUid === myUid;
@@ -231,13 +235,10 @@
       } catch {}
     }
 
-    // Prefill from local
+    // Prefill
     (function tryResume() {
       const saved = loadLocal();
-      if (saved.sessionId && saved.myName && saved.myUid) {
-        nameInput.value = saved.myName;
-        sessionInput.value = saved.sessionId;
-      }
+      if (saved.sessionId && saved.myName && saved.myUid) { nameInput.value = saved.myName; sessionInput.value = saved.sessionId; }
     })();
 
     // Join
@@ -249,13 +250,11 @@
       if (!name) { joinStatus.innerHTML = '<span class="err">Enter your name</span>'; return; }
       if (!sid) { joinStatus.innerHTML = '<span class="err">Enter a session ID</span>'; return; }
 
-      joinBtn.disabled = true;
-      joinStatus.textContent = "Joining…";
+      joinBtn.disabled = true; joinStatus.textContent = "Joining…";
 
       try {
         myUid = "u_" + Math.random().toString(36).slice(2, 10);
-        myName = name;
-        sessionId = sid;
+        myName = name; sessionId = sid;
 
         const sesRef = ref(db, `sessions/${sessionId}`);
         const snap = await get(sesRef);
@@ -263,46 +262,30 @@
 
         // Enforce max 2 seats
         const playerIds = Object.keys(players);
-        if (playerIds.length >= 2) {
-          joinStatus.innerHTML = '<span class="err">Session is full (2/2)</span>';
-          joinBtn.disabled = false;
-          return;
-        }
+        if (playerIds.length >= 2) { joinStatus.innerHTML = '<span class="err">Session is full (2/2)</span>'; joinBtn.disabled = false; return; }
 
         // Same-name disambiguation
         if (playerIds.length === 1) {
           const existing = players[playerIds[0]];
-          if (existing?.name?.trim().toLowerCase() === name.toLowerCase()) {
-            myName = `${name} (2)`;
-          }
+          if (existing?.name?.trim().toLowerCase() === name.toLowerCase()) myName = `${name} (2)`;
         }
 
         // Create session if new
         if (!snap.exists()) {
-          await set(sesRef, {
-            createdAt: serverTimestamp(),
-            words: [],
-            currentTurnUid: myUid,
-            players: {}
-          });
+          await set(sesRef, { createdAt: serverTimestamp(), words: [], currentTurnUid: myUid, players: {} });
         }
 
-        // Default colour (random pleasant hue)
+        // Default colour
         const defaultColour = colourPicker.value || `#${Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,"0")}`;
 
         const myPlayerRef = ref(db, `sessions/${sessionId}/players/${myUid}`);
 
-        // Add me as a player (with colour)
+        // Add me (with colour)
         await update(ref(db, `sessions/${sessionId}/players`), {
-          [myUid]: {
-            uid: myUid,
-            name: myName,
-            colour: defaultColour,
-            joinedAt: serverTimestamp()
-          }
+          [myUid]: { uid: myUid, name: myName, colour: defaultColour, joinedAt: serverTimestamp() }
         });
 
-        // Presence: free seat on disconnect
+        // Free seat on disconnect
         onDisconnect(myPlayerRef).remove();
 
         // UI switch
@@ -311,8 +294,9 @@
         sessionLabel.textContent = sessionId;
         youLabel.textContent = myName;
         colourPicker.value = defaultColour;
+        setMyColourUI(defaultColour);
 
-        // Subscribe
+        // Subscribe to session changes
         if (unsubSession) unsubSession();
         unsubSession = onValue(sesRef, (s) => {
           const val = s.val() || {};
@@ -326,14 +310,14 @@
           peerName = peerId ? (players[peerId]?.name || "Partner") : null;
           peerLabel.textContent = peerName || "(none)";
 
-          // Dots show seat presence
-          setDot(youDot, !!players[myUid]);
-          setDot(peerDot, !!players[peerId]);
+          // Dots use chosen colours (or grey if not present)
+          setDotColour(youDot, players[myUid]?.colour, !!players[myUid]);
+          setDotColour(peerDot, players[peerId]?.colour, !!players[peerId]);
 
           // Status
           setUIConnected(playerIdsNow.length > 0);
 
-          // Render story with colours
+          // Render coloured story
           renderStory(words, players);
 
           // Fix turn if missing player
@@ -345,9 +329,7 @@
 
           // Solo lock after first word
           if (playerIdsNow.length < 2 && words.length > 0) {
-            submitBtn.disabled = true;
-            wordInput.disabled = true;
-            turnBanner.textContent = "Waiting for partner…";
+            submitBtn.disabled = true; wordInput.disabled = true; turnBanner.textContent = "Waiting for partner…";
           } else {
             setTurnBanner(cturn, players);
           }
@@ -372,9 +354,10 @@
             update(sesRef, { currentTurnUid: sorted[0] });
           }
 
-          // Keep our picker in sync if colour changed elsewhere
+          // Keep our picker/swatch in sync if changed elsewhere
           if (players[myUid]?.colour && colourPicker.value !== players[myUid].colour) {
             colourPicker.value = players[myUid].colour;
+            setMyColourUI(players[myUid].colour);
           }
         });
 
@@ -388,11 +371,16 @@
       }
     };
 
-    // Change colour -> save to Firebase
+    // Swatch opens hidden picker
+    colourSwatch.addEventListener("click", () => colourPicker.click());
+
+    // Picker change -> update swatch + Firebase
     colourPicker.addEventListener("input", async () => {
       try {
         if (!sessionId || !myUid) return;
-        await update(ref(db, `sessions/${sessionId}/players/${myUid}`), { colour: colourPicker.value });
+        const hex = colourPicker.value;
+        setMyColourUI(hex);
+        await update(ref(db, `sessions/${sessionId}/players/${myUid}`), { colour: hex });
       } catch (e) { console.error(e); }
     });
 
@@ -407,16 +395,8 @@
       const ses = sesSnap.val();
       if (!ses) { errorBox.textContent = "Session not found."; return; }
 
-      if (ses.currentTurnUid !== myUid) {
-        errorBox.textContent = "Not your turn yet.";
-        wordInput.value = "";
-        return;
-      }
-
-      if (!WORD_RX.test(word)) {
-        errorBox.textContent = "Invalid word. Use letters, apostrophes, hyphens, optional .,!? at end.";
-        return;
-      }
+      if (ses.currentTurnUid !== myUid) { errorBox.textContent = "Not your turn yet."; wordInput.value = ""; return; }
+      if (!WORD_RX.test(word)) { errorBox.textContent = "Invalid word. Use letters, apostrophes, hyphens, optional .,!? at end."; return; }
 
       const words = ses.words || [];
       const players = ses.players || {};
@@ -429,54 +409,33 @@
           currentTurnUid: nextTurnUid
         });
 
-        if (!peerUid) {
-          submitBtn.disabled = true;
-          wordInput.disabled = true;
-          turnBanner.textContent = "Waiting for partner…";
-        }
-
+        if (!peerUid) { submitBtn.disabled = true; wordInput.disabled = true; turnBanner.textContent = "Waiting for partner…"; }
         wordInput.value = "";
-      } catch (e) {
-        console.error(e);
-        errorBox.textContent = "Failed to add word. Check your connection.";
-      }
+      } catch (e) { console.error(e); errorBox.textContent = "Failed to add word. Check your connection."; }
     };
 
     // Copy/Download/Leave
     copyBtn.onclick = async () => {
       const text = [...document.querySelectorAll("#storyBox .word")].map(el => el.textContent).join(" ");
       await navigator.clipboard.writeText(text);
-      copyBtn.textContent = "Copied!";
-      setTimeout(() => (copyBtn.textContent = "Copy story"), 1200);
+      copyBtn.textContent = "Copied!"; setTimeout(() => (copyBtn.textContent = "Copy story"), 1200);
     };
-
     downloadBtn.onclick = () => {
       const text = [...document.querySelectorAll("#storyBox .word")].map(el => el.textContent).join(" ");
       const blob = new Blob([text], { type: "text/plain" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = `story-${sessionId || "session"}.txt`;
-      a.click();
-      URL.revokeObjectURL(a.href);
+      a.click(); URL.revokeObjectURL(a.href);
     };
-
-    leaveBtn.onclick = async () => {
-      try {
-        if (sessionId && myUid) {
-          await remove(ref(db, `sessions/${sessionId}/players/${myUid}`)); // free the seat
-        }
-      } catch {}
-      location.reload();
-    };
+    leaveBtn.onclick = async () => { try { if (sessionId && myUid) await remove(ref(db, `sessions/${sessionId}/players/${myUid}`)); } catch {} location.reload(); };
 
     // Keyboard shortcuts
     wordInput.addEventListener("keydown", (e) => { if (e.key === "Enter") submitBtn.click(); });
     sessionInput.addEventListener("keydown", (e) => { if (e.key === "Enter") joinBtn.click(); });
 
     // Minor status tweak on tab hide/show
-    document.addEventListener("visibilitychange", () => {
-      statusDot.textContent = document.hidden ? "Background" : "Connected";
-    });
+    document.addEventListener("visibilitychange", () => { statusDot.textContent = document.hidden ? "Background" : "Connected"; });
   </script>
 
   <div style="position:fixed;bottom:10px;left:50%;transform:translateX(-50%);font-size:12px;color:#9aa3d7;">
