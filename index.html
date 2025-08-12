@@ -353,6 +353,10 @@
         auth.style.display="none"; game.style.display="block";
         sessionLabel.textContent=sid; youLabel.textContent=myName;
 
+        // Disable controls until realtime state enables them
+        submitBtn.disabled = true;
+        wordInput.disabled = true;
+
         // Set local/UI colour from server if present, else default
         const myColourNow = (players[myUid]?.colour) || defaultColour;
         colourPicker.value = myColourNow;
