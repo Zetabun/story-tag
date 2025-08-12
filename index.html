@@ -222,6 +222,25 @@
     const clientId = getClientId();
 
     /* ========= Local storage ========= */
+    // Per-session colour persistence (derivedKey + clientId -> hex)
+    const COL_KEY="storytag_session_colours_v1";
+    const loadColourMap=()=>{ try{return JSON.parse(localStorage.getItem(COL_KEY)||"{}");}catch{return{};} };
+    const saveColourMap=m=>localStorage.setItem(COL_KEY, JSON.stringify(m));
+    function saveSessionColour(derivedKey, clientId, hex){
+      if(!derivedKey||!clientId||!hex) return;
+      const map = loadColourMap();
+      const key = `${derivedKey}|${clientId}`;
+      map[key] = String(hex);
+      saveColourMap(map);
+    }
+    function loadSessionColour(derivedKey, clientId){
+      try{
+        const key = `${derivedKey}|${clientId}`;
+        const map = loadColourMap();
+        return map[key] || null;
+      }catch{return null;}
+    }
+
     const LS_KEY="storytag_state_v1", REM_KEY="storytag_remembered_sessions_v1", LAST_KEY="storytag_last_session_v1";
     const saveLocal=s=>localStorage.setItem(LS_KEY,JSON.stringify(s));
     const loadLocal=()=>{ try{return JSON.parse(localStorage.getItem(LS_KEY)||"{}");}catch{return{};} };
@@ -304,6 +323,7 @@
           else { if(!pwd){ if(!auto) joinStatus.innerHTML='<span class="err">Enter a password</span>'; return; }
                  derivedKey=await sha256Base64Url(`${sid}:${pwd}`); }
         }
+        const savedSessionColour = loadSessionColour(derivedKey, clientId);
 
         const sesRef=ref(db,`sessions/${derivedKey}`); const snap=await get(sesRef);
         const exists=snap.exists(); const existing=snap.val()||{}; const players=existing.players||{};
@@ -333,7 +353,7 @@
         }
 
         // --- Create/update player seat (DON'T overwrite colour if seat already exists) ---
-        const defaultColour= colourPicker.value || `#${Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,"0")}`;
+        const defaultColour= (savedSessionColour || colourPicker.value) || `#${Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,"0")}`;
         const myPlayerRef=ref(db,`sessions/${derivedKey}/players/${myUid}`);
         const seatExists = !!players[myUid];
 
@@ -357,6 +377,7 @@
         const myColourNow = (players[myUid]?.colour) || defaultColour;
         colourPicker.value = myColourNow;
         localColour[myUid] = myColourNow;
+        saveSessionColour(derivedKey, clientId, myColourNow);
         setMyColourUI(myColourNow);
 
         // Subscribe to session
@@ -393,11 +414,12 @@
           peerLabel.textContent=peerId?(players[peerId]?.name||"Partner"):"(none)";
 
           // Sync picker & dots to server colour
-          const myEffectiveColour = (players?.[myUid]?.colour) || lastWordColourBy(myUid, words) || localColour[myUid] || colourPicker.value || "#58a6ff";
+          const myEffectiveColour = (players?.[myUid]?.colour) || lastWordColourBy(myUid, words) || savedSessionColour || localColour[myUid] || colourPicker.value || "#58a6ff";
           if (myEffectiveColour && colourPicker.value.toLowerCase() !== myEffectiveColour.toLowerCase()) {
             colourPicker.value = myEffectiveColour;
           }
           localColour[myUid] = myEffectiveColour;
+          saveSessionColour(derivedKey, clientId, myEffectiveColour);
           setMyColourUI(myEffectiveColour);
           setDotColour(youDot, myEffectiveColour, !!mergedPlayers[myUid]);
           // If server doesn't have my colour yet, persist it once to players/<myUid>
@@ -452,7 +474,7 @@
         const hex=colourPicker.value;
 
         // Instant UI
-        localColour[myUid]=hex; setMyColourUI(hex); setDotColour(youDot,hex,true);
+        localColour[myUid]=hex; saveSessionColour(last.derivedKey, clientId, hex); setMyColourUI(hex); setDotColour(youDot,hex,true);
 
         // Persist
         if(myUid) await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`),{ colour:hex, lastActive:Date.now() });
