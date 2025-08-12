@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><text y='50%' x='0' dy='.35em' font-size='52'>🏷️</text></svg>">
   <meta charset="utf-8" />
   <meta name="viewport"
         content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
@@ -515,9 +516,8 @@ async function handleColourChange(){
         try{ saveSessionColour(last.derivedKey, clientId, hex); }catch{} setMyColourUI(hex);
     
         // Immediately enable input locally if it's my turn and I haven't written yet
-        const cturnLocal = val.currentTurnUid;
-        const myWordsSoFar = words.reduce((n,w)=>n+((w&&w.by===myUid)?1:0),0);
-        if (cturnLocal === myUid && myWordsSoFar === 0) {
+        /* cturnLocal (dup) removed */
+        const my/* myWordsSoFar (dup) removed */ if (cturnLocal === myUid && myWordsSoFar === 0) {
           submitBtn.disabled = false;
           wordInput.disabled = false;
           turnBanner.textContent = "It's your turn";
