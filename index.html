@@ -357,7 +357,7 @@
         submitBtn.disabled = true;
         wordInput.disabled = true;
 
-        // Set local/UI colour from server if present, else default
+        // Set local/UI colour only if server already has one (no default)
         const myColourNow = (players[myUid]?.colour) || null;
         if (myColourNow) {
           colourPicker.value = myColourNow;
@@ -375,31 +375,43 @@
           youPresence.className=`presence ${meP.cls}`; youPresence.textContent=meP.label;
           peerPresence.className=`presence ${peP.cls}`; peerPresence.textContent=peP.label;
 
-          // Merge local colour to avoid flicker
-          const mergedPlayers=JSON.parse(JSON.stringify(players||{}));
-          if(localColour[myUid]){ mergedPlayers[myUid]=mergedPlayers[myUid]||{}; mergedPlayers[myUid].colour=localColour[myUid]; }
           peerLabel.textContent=peerId?(players[peerId]?.name||"Partner"):"(none)";
 
           // Sync picker & dots to server colour
-          const myColourFromServer = mergedPlayers[myUid]?.colour;
+          const myColourFromServer = players[myUid]?.colour || null;
           if (myColourFromServer && colourPicker.value.toLowerCase() !== myColourFromServer.toLowerCase()) {
             colourPicker.value = myColourFromServer;
           }
           setMyColourUI(myColourFromServer);
-          setDotColour(youDot, myColourFromServer, !!mergedPlayers[myUid]);
-          setDotColour(peerDot, mergedPlayers[peerId]?.colour, !!mergedPlayers[peerId]);
+          setDotColour(youDot, myColourFromServer, !!players[myUid]);
+          setDotColour(peerDot, players[peerId]?.colour, !!players[peerId]);
 
           setUIConnected(ids.length>0);
-          renderStory(words,mergedPlayers);
+          renderStory(words,players);
+          // Enforce colour gate: must pick before first word; lock after first word
+          const myWordsSoFar = (Array.isArray(words)?words:[]).reduce((n,w)=>n + ((w&&w.by===myUid)?1:0), 0);
+          const colourChosen = !!(players[myUid]?.colour);
+          const isLocked = !!(players[myUid]?.colourLocked) || myWordsSoFar > 0;
+          // Lock/Unlock the picker visually
+          colourPicker.disabled = isLocked;
+          colourPicker.title = isLocked ? "Colour locked for this session" : "Pick your colour";
+          // If it's my turn but I haven't chosen a colour yet, block typing
+          if (cturn === myUid && !colourChosen) {
+            submitBtn.disabled = true;
+            wordInput.disabled = true;
+            turnBanner.textContent = "Pick your colour to start";
+          } else {
+            if(ids.length<2 && words.length>0){
+              submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…";
+            } else {
+              setTurnBanner(cturn,players,myUid);
+            }
+          }
+
 
           if(cturn && !players[cturn] && ids.length>0){ const newTurn=ids[0]; update(sesRef,{currentTurnUid:newTurn}); cturn=newTurn; }
-          if (cturn===myUid && !players[myUid]?.colour) {
-          submitBtn.disabled = true;
-          wordInput.disabled = true;
-          turnBanner.textContent = "Pick your colour to start";
-        } else if(ids.length<2 && words.length>0){
-          submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…";
-        } else setTurnBanner(cturn,players,myUid);
+          if(ids.length<2 && words.length>0){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
+          else setTurnBanner(cturn,players,myUid);
 
           const last=words[words.length-1]; const isMyTurn=(cturn===myUid)&&(ids.length===2);
           if(ids.length===2 && last && last.by===myUid && cturn===myUid && peerId){ update(sesRef,{currentTurnUid:peerId}); }
@@ -433,6 +445,11 @@
         const last=loadLastSession(); if(!last) return;
         const sesRef=ref(db,`sessions/${last.derivedKey}`); const snap=await get(sesRef);
         const players=(snap.val()&&snap.val().players)||{}; const myUid=Object.keys(players).find(u=>players[u]?.clientId===clientId);
+        if(players[myUid]?.colourLocked){ // Revert and exit
+          const eff = players[myUid]?.colour || localColour[myUid] || colourPicker.value;
+          if (eff) { colourPicker.value = eff; setMyColourUI(eff); setDotColour(youDot, eff, true); }
+          return;
+        }
         const hex=colourPicker.value;
 
         // Instant UI
@@ -464,9 +481,11 @@
       const myColourNow=(players[myUid]?.colour)||localColour[myUid]||colourPicker.value||"#c6cdff";
 
       try{
+        const wasFirst = words.every(w => !w || w.by !== myUid);
         await update(sesRef,{
           words:[...words,{ w:titleCaseFirstWordIfNeeded(words.length,word), by:myUid, c:myColourNow, t:Date.now() }],
-          currentTurnUid: peerUid || myUid
+          currentTurnUid: peerUid || myUid,
+          players: wasFirst ? { ...players, [myUid]: { ...(players[myUid]||{}), colourLocked: true } } : players
         });
         wordInput.value="";
         if(!peerUid){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
