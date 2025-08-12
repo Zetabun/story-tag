@@ -494,6 +494,18 @@
           setUIConnected(ids.length>0);
           renderStory(words,mergedPlayers);
 
+          // Canonicalize turn when unset or pointing to a missing seat:
+          // with two players and at least one word, the next turn is the OTHER of the last writer.
+          (function(){
+            const last = words[words.length-1] || null;
+            const cturnMissing = !cturn || !players[cturn];
+            if (cturnMissing && Object.keys(players).length >= 2 && last && last.by){
+              const candidate = Object.keys(players).find(u => u !== last.by) || last.by;
+              if (cturn !== candidate) { try { update(sesRef,{ currentTurnUid: candidate }); } catch {} }
+              cturn = candidate;
+            }
+          })();
+    
           
           
           // Recover cturn if it points at a missing seat
