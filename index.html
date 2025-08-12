@@ -35,32 +35,20 @@
     .divider { height:1px; background:#2a2f4a; margin:14px 0; }
     .tag { display:inline-flex; align-items:center; gap:6px; }
     .dot { width:10px; height:10px; border-radius:50%; background:#666; box-shadow: 0 0 0 1px rgba(255,255,255,.12) inset; }
-    /* coloured words */
     .word { display:inline; }
     .word + .word::before { content: " "; }
-    /* colour swatch + input overlay */
     .colourWrap { position: relative; display: inline-block; }
-    .swatch{
-      width:28px; height:14px; border-radius:7px;
-      border:1px solid #2a2f4a; background:#58a6ff;
-      display:inline-block; vertical-align:middle;
-      box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
-    }
+    .swatch{ width:28px; height:14px; border-radius:7px; border:1px solid #2a2f4a; background:#58a6ff; display:inline-block; vertical-align:middle; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
     .swatchInput{ position:absolute; inset:0; opacity:0; cursor:pointer; }
-
-    /* Presence badge styling */
     .presence { font-weight:600; }
     .online { color:#69f0ae; }
     .away { color:#ffd166; }
     .offline { color:#b0b7e1; }
-
-    /* Mobile responsive tweaks */
     @media (max-width: 768px) {
       .row { gap:8px; }
       .pill { font-size:11px; padding:6px 8px; }
       .story { min-height:120px; font-size:16px; }
-      #wordInput { flex:1 1 100%; }
-      #submitBtn { flex:1 1 100%; }
+      #wordInput, #submitBtn { flex:1 1 100%; }
       .toolbar button { flex:1 1 calc(50% - 8px); }
     }
   </style>
@@ -150,7 +138,6 @@
     </div>
   </div>
 
-  <!-- Firebase via CDN -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
@@ -159,7 +146,7 @@
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
     const firebaseConfig = {
-      apiKey: "AIzaSyCVOzSTr3lPRm1BRzKTJtdEG-nsdnVIhiM", // <— NEW KEY
+      apiKey: "AIzaSyCVOzSTr3lPRm1BRzKTJtdEG-nsdnVIhiM",
       authDomain: "zetabun-91b0c.firebaseapp.com",
       databaseURL: "https://zetabun-91b0c-default-rtdb.europe-west1.firebasedatabase.app",
       projectId: "zetabun-91b0c",
@@ -189,7 +176,7 @@
           copyBtn = $("copyBtn"), downloadBtn = $("downloadBtn"), leaveBtn = $("leaveBtn"),
           errorBox = $("errorBox");
 
-    // ----- Stable client id for seat reclaim -----
+    // Stable client id
     const CID_KEY = "storytag_client_id";
     function getClientId() {
       let cid = localStorage.getItem(CID_KEY);
@@ -199,9 +186,9 @@
     const clientId = getClientId();
 
     // Local storage
-    const LS_KEY = "storytag_state_v1"; // { sessionId, myName }
-    const REM_KEY = "storytag_remembered_sessions_v1"; // { [sessionId]: derivedKey }
-    const LAST_KEY = "storytag_last_session_v1"; // { sessionId, derivedKey, myName }
+    const LS_KEY = "storytag_state_v1";
+    const REM_KEY = "storytag_remembered_sessions_v1";
+    const LAST_KEY = "storytag_last_session_v1";
     function saveLocal(state) { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
     function loadLocal() { try { return JSON.parse(localStorage.getItem(LS_KEY) || "{}"); } catch { return {}; } }
     function loadRememberMap(){ try { return JSON.parse(localStorage.getItem(REM_KEY) || "{}"); } catch { return {}; } }
@@ -211,35 +198,29 @@
 
     // Presence thresholds
     const ONLINE_MS = 20 * 1000;
-    const AWAY_MS = 2 * 60 * 1000;
+    const AWAY_MS   = 2 * 60 * 1000;
+    const STALE_MS  = 60 * 1000; // if a seat has no activity for >60s, it can be reclaimed
 
-    // Friendly hints
     function setSavedHintText(sid){
       const map = loadRememberMap();
-      if (sid && map[sid]) {
-        savedHint.innerHTML = `Saved on this device — password optional.`;
-      } else savedHint.textContent = "";
+      if (sid && map[sid]) savedHint.textContent = "Saved on this device — password optional.";
+      else savedHint.textContent = "";
     }
 
-    // Word regex (letters, apostrophes, hyphens, optional trailing .,!?)
     const WORD_RX = /^[A-Za-z]+(?:['-][A-Za-z]+)*(?:[.,!?])?$/;
-
-    // Utils
     function titleCaseFirstWordIfNeeded(i, word) { return (i === 0 && word.length) ? word[0].toUpperCase() + word.slice(1) : word; }
     function setUIConnected(connected) { statusDot.textContent = connected ? "Connected" : "Offline"; }
     function escapeHtml(s) { return (s || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
     function setDotColour(el, colour, present) { el.style.background = present ? (colour || "#666") : "#666"; el.style.boxShadow = "0 0 0 1px rgba(255,255,255,.12) inset"; }
     function setMyColourUI(hex){ if (!hex) return; colourSwatch.style.background = hex; youDot.style.background = hex; }
     function presenceOf(ts) {
-      const now = Date.now();
-      const d = now - (ts || 0);
+      const now = Date.now(), d = now - (ts || 0);
       if (!ts) return {cls:"offline", label:"(offline)"};
       if (d <= ONLINE_MS) return {cls:"online", label:"(online)"};
       if (d <= AWAY_MS)   return {cls:"away", label:"(away)"};
       return {cls:"offline", label:"(offline)"};
     }
 
-    // Crypto: SHA-256 → base64url
     async function sha256Base64Url(input) {
       const enc = new TextEncoder();
       const hash = await crypto.subtle.digest("SHA-256", enc.encode(input));
@@ -248,16 +229,17 @@
       return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
     }
 
-    // Render story — merge local colour override before using players map
-    const localColour = { }; // uid -> hex (ensures instant colour persistence)
+    // Local colour override for instant rendering
+    const localColour = { }; // uid -> hex
+
     function renderStory(words, players) {
       storyBox.innerHTML = "";
       if (!words.length) { storyBox.textContent = "(No words yet—be the first to write!)"; wordCount.textContent = "0"; return; }
       for (const w of words) {
         const span = document.createElement("span");
         span.className = "word";
-        const colour = (players?.[w.by]?.colour) || localColour[w.by] || "#c6cdff";
-        span.style.color = colour;
+        const col = w.c || (players?.[w.by]?.colour) || localColour[w.by] || "#c6cdff";
+        span.style.color = col;
         span.textContent = w.w;
         storyBox.appendChild(span);
       }
@@ -275,7 +257,6 @@
       submitBtn.disabled = !mine; wordInput.disabled = !mine; if (mine) wordInput.focus();
     }
 
-    // Sound
     let audioCtx = null, canPlaySound = false, wasMyTurn = null;
     function ensureAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
     function playTurnSound() {
@@ -287,14 +268,12 @@
       } catch {}
     }
 
-    // Prefill & hint
     (function tryPrefill() {
       const saved = loadLocal();
       if (saved.sessionId && saved.myName) { nameInput.value = saved.myName; sessionInput.value = saved.sessionId; setSavedHintText(saved.sessionId); }
     })();
     sessionInput.addEventListener("input", () => setSavedHintText(sessionInput.value.trim()));
 
-    // ---------- Enter session (mode: 'create' | 'join'); supports silent auto-resume ----------
     async function enterSession(mode, opts = {}) {
       const { auto = false } = opts;
       if (!auto) canPlaySound = true;
@@ -306,20 +285,14 @@
 
       if (!name) { if (!auto) joinStatus.innerHTML = '<span class="err">Enter your name</span>'; return; }
       if (!sid)  { if (!auto) joinStatus.innerHTML = '<span class="err">Enter a session ID</span>'; return; }
-
       if (!auto) { joinBtn.disabled = true; createBtn.disabled = true; joinStatus.textContent = mode === 'create' ? "Creating…" : "Joining…"; }
 
       try {
-        // derive/load key
         const remembered = loadRememberMap();
         let derivedKey = opts.derivedKeyOverride || null;
         if (!derivedKey) {
-          if (mode === 'join' && !pwd && remembered[sid]) {
-            derivedKey = remembered[sid];
-          } else {
-            if (!pwd) { if (!auto) { joinStatus.innerHTML = '<span class="err">Enter a password</span>'; } return; }
-            derivedKey = await sha256Base64Url(`${sid}:${pwd}`);
-          }
+          if (mode === 'join' && !pwd && remembered[sid]) derivedKey = remembered[sid];
+          else { if (!pwd) { if (!auto) joinStatus.innerHTML = '<span class="err">Enter a password</span>'; return; } derivedKey = await sha256Base64Url(`${sid}:${pwd}`); }
         }
 
         const sesRef = ref(db, `sessions/${derivedKey}`);
@@ -331,31 +304,37 @@
         if (mode === 'create' && exists) { if (!auto) joinStatus.innerHTML = '<span class="warn">Session already exists. Use Join.</span>'; return; }
         if (mode === 'join' && !exists) { if (!auto) joinStatus.innerHTML = '<span class="warn">No session found. Use Create.</span>'; return; }
 
-        // Reuse seat by clientId
+        // Try reclaim by clientId
         let myUid = Object.keys(players).find(uid => players[uid]?.clientId === clientId) || ("u_" + Math.random().toString(36).slice(2, 10));
         let myName = name;
 
-        // Seat cap
+        // If full and we don't already own a seat, evict stale seats (>60s inactive)
         const seatCount = Object.keys(players).length;
-        if (seatCount >= 2 && !players[myUid]) { if (!auto) joinStatus.innerHTML = '<span class="err">Session is full (2/2)</span>'; return; }
+        if (seatCount >= 2 && !players[myUid]) {
+          const now = Date.now();
+          const staleUid = Object.keys(players).find(u => (now - (players[u]?.lastActive || 0)) > STALE_MS);
+          if (staleUid) {
+            await remove(ref(db, `sessions/${derivedKey}/players/${staleUid}`));
+          } else {
+            if (!auto) joinStatus.innerHTML = '<span class="err">Session is full (2/2)</span>';
+            return;
+          }
+        }
 
-        // Create if needed
+        // Create session on 'create'
         if (!exists && mode === 'create') {
           await set(sesRef, { createdAt: serverTimestamp(), friendlyId: sid, words: [], currentTurnUid: myUid, players: {} });
         } else if (exists && !existing.friendlyId) {
           await update(sesRef, { friendlyId: existing.friendlyId || sid });
         }
 
-        // Name disambiguation
-        if (!players[myUid] && seatCount === 1) {
+        // Same-name disambiguation
+        if (!players[myUid] && Object.keys(players).length === 1) {
           const [otherUid] = Object.keys(players);
           if (players[otherUid]?.name?.trim().toLowerCase() === name.toLowerCase()) myName = `${name} (2)`;
         }
 
-        // Default colour
         const defaultColour = colourPicker.value || `#${Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,"0")}`;
-
-        // Write seat (with presence + lastActive)
         const nowTs = Date.now();
         const myPlayerRef = ref(db, `sessions/${derivedKey}/players/${myUid}`);
         await set(myPlayerRef, {
@@ -368,19 +347,22 @@
         });
         onDisconnect(myPlayerRef).remove();
 
+        // Also try to remove seat on page unload (best-effort)
+        window.addEventListener("unload", () => { try { navigator.sendBeacon && remove(myPlayerRef); } catch {} });
+
         // Remember session locally
         if (!auto && rememberChk.checked) {
           const map = loadRememberMap(); map[sid] = derivedKey; saveRememberMap(map); setSavedHintText(sid);
         }
         saveLastSession({ sessionId: sid, derivedKey, myName });
 
-        // Switch UI
+        // UI switch
         auth.style.display = "none";
         game.style.display = "block";
         sessionLabel.textContent = sid;
         youLabel.textContent = myName;
         colourPicker.value = players[myUid]?.colour || defaultColour;
-        localColour[myUid] = colourPicker.value; // local override for instant persistence
+        localColour[myUid] = colourPicker.value;
         setMyColourUI(colourPicker.value);
 
         // Subscribe
@@ -399,57 +381,48 @@
           youPresence.className = `presence ${meP.cls}`; youPresence.textContent = meP.label;
           peerPresence.className = `presence ${peP.cls}`; peerPresence.textContent = peP.label;
 
-          // Names & dots
-          peerLabel.textContent = peerId ? (players[peerId]?.name || "Partner") : "(none)";
-          // Merge local colour override so story doesn't flicker to white
+          // Names & dots (merge local colour to avoid flicker)
           const mergedPlayers = JSON.parse(JSON.stringify(players || {}));
           if (localColour[myUid]) { mergedPlayers[myUid] = mergedPlayers[myUid] || {}; mergedPlayers[myUid].colour = localColour[myUid]; }
+          peerLabel.textContent = peerId ? (players[peerId]?.name || "Partner") : "(none)";
           setDotColour(youDot, mergedPlayers[myUid]?.colour, !!mergedPlayers[myUid]);
           setDotColour(peerDot, mergedPlayers[peerId]?.colour, !!mergedPlayers[peerId]);
 
           setUIConnected(ids.length > 0);
           renderStory(words, mergedPlayers);
 
-          // Fix turn if missing player
           if (cturn && !players[cturn] && ids.length > 0) {
             const newTurn = ids[0];
             update(sesRef, { currentTurnUid: newTurn });
             cturn = newTurn;
           }
 
-          // Solo lock after first word
           if (ids.length < 2 && words.length > 0) {
             submitBtn.disabled = true; wordInput.disabled = true; turnBanner.textContent = "Waiting for partner…";
           } else {
             setTurnBanner(cturn, players, myUid);
           }
 
-          // Auto-handoff when partner arrives
           const last = words[words.length - 1];
           if (ids.length === 2 && last && last.by === myUid && cturn === myUid && peerId) {
             update(sesRef, { currentTurnUid: peerId });
           }
 
-          // Turn sound
           const isMyTurn = (cturn === myUid) && (ids.length === 2);
           if (wasMyTurn === false && isMyTurn) playTurnSound();
           if (wasMyTurn === null) wasMyTurn = isMyTurn; else wasMyTurn = isMyTurn;
 
-          // Save lightweight state
           saveLocal({ sessionId: sid, myName });
         });
 
         if (!auto) { wordInput.focus(); joinStatus.innerHTML = '<span class="ok">Ready!</span>'; }
 
-        // Presence heartbeat (every 10s + on interactions)
+        // Presence heartbeat + on interaction
         if (window._presenceTimer) clearInterval(window._presenceTimer);
         window._presenceTimer = setInterval(async () => {
           try { await update(ref(db, `sessions/${derivedKey}/players/${myUid}`), { lastActive: Date.now() }); } catch {}
         }, 10000);
-
-        const bumpPresence = async () => {
-          try { await update(ref(db, `sessions/${derivedKey}/players/${myUid}`), { lastActive: Date.now() }); } catch {}
-        };
+        const bumpPresence = async () => { try { await update(ref(db, `sessions/${derivedKey}/players/${myUid}`), { lastActive: Date.now() }); } catch {} };
         ["click","keydown","touchstart","visibilitychange"].forEach(ev => document.addEventListener(ev, bumpPresence, {passive:true}));
 
       } catch (e) {
@@ -460,28 +433,24 @@
       }
     }
 
-    // Buttons
     createBtn.onclick = () => enterSession('create');
     joinBtn.onclick = () => enterSession('join');
 
-    // Colour picker change -> update swatch + Firebase (and local override for persistence)
     colourPicker.addEventListener("input", async () => {
       try {
         const last = loadLastSession(); if (!last) return;
         const { derivedKey } = last;
-        // find my uid by clientId
         const sesRef = ref(db, `sessions/${derivedKey}`);
         const snap = await get(sesRef);
         const players = (snap.val() && snap.val().players) || {};
         const myUid = Object.keys(players).find(uid => players[uid]?.clientId === clientId);
         const hex = colourPicker.value;
-        localColour[myUid] = hex; // make it stick immediately
+        localColour[myUid] = hex;
         setMyColourUI(hex);
         if (myUid) await update(ref(db, `sessions/${derivedKey}/players/${myUid}`), { colour: hex, lastActive: Date.now() });
       } catch (e) { console.error(e); }
     });
 
-    // Submit word
     submitBtn.onclick = async () => {
       errorBox.textContent = "";
       let word = (wordInput.value || "").trim();
@@ -496,7 +465,6 @@
       const ses = sesSnap.val();
       if (!ses) { errorBox.textContent = "Session not found."; return; }
 
-      // Find myUid by clientId
       const players = ses.players || {};
       const myUid = Object.keys(players).find(uid => players[uid]?.clientId === clientId);
       if (!myUid) { errorBox.textContent = "Rejoin required."; return; }
@@ -506,20 +474,19 @@
 
       const words = Array.isArray(ses.words) ? ses.words : [];
       const peerUid = Object.keys(players).find(k => k !== myUid);
+      const myColourNow = (players[myUid]?.colour) || localColour[myUid] || colourPicker.value || "#c6cdff";
 
       try {
         await update(sesRef, {
-          words: [...words, { w: titleCaseFirstWordIfNeeded(words.length, word), by: myUid, t: Date.now() }],
+          words: [...words, { w: titleCaseFirstWordIfNeeded(words.length, word), by: myUid, c: myColourNow, t: Date.now() }],
           currentTurnUid: peerUid || myUid
         });
         wordInput.value = "";
         if (!peerUid) { submitBtn.disabled = true; wordInput.disabled = true; turnBanner.textContent = "Waiting for partner…"; }
-        // bump presence
         await update(ref(db, `sessions/${derivedKey}/players/${myUid}`), { lastActive: Date.now() });
       } catch (e) { console.error(e); errorBox.textContent = "Failed to add word. Check your connection."; }
     };
 
-    // Copy / Download / Leave
     copyBtn.onclick = async () => {
       const text = [...document.querySelectorAll("#storyBox .word")].map(el => el.textContent).join(" ");
       await navigator.clipboard.writeText(text);
@@ -545,22 +512,16 @@
           if (myUid) await remove(ref(db, `sessions/${derivedKey}/players/${myUid}`));
         }
       } catch {}
-      // clear auto-resume + back to login
       localStorage.removeItem(LAST_KEY);
       location.reload();
     };
 
-    // Keyboard shortcuts
     wordInput.addEventListener("keydown", (e) => { if (e.key === "Enter") submitBtn.click(); });
     sessionInput.addEventListener("keydown", (e) => { if (e.key === "Enter") joinBtn.click(); });
     passwordInput.addEventListener("keydown", (e) => { if (e.key === "Enter") joinBtn.click(); });
 
-    // Minor status tweak on tab hide/show
-    document.addEventListener("visibilitychange", () => {
-      statusDot.textContent = document.hidden ? "Background" : "Connected";
-    });
+    document.addEventListener("visibilitychange", () => { statusDot.textContent = document.hidden ? "Background" : "Connected"; });
 
-    // Auto-resume on load
     (async function autoResume() {
       const last = loadLastSession();
       if (!last) return;
