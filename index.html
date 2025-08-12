@@ -222,25 +222,6 @@
     const clientId = getClientId();
 
     /* ========= Local storage ========= */
-    // Per-session colour persistence (derivedKey + clientId -> hex)
-    const COL_KEY="storytag_session_colours_v1";
-    const loadColourMap=()=>{ try{return JSON.parse(localStorage.getItem(COL_KEY)||"{}");}catch{return{};} };
-    const saveColourMap=m=>localStorage.setItem(COL_KEY, JSON.stringify(m));
-    function saveSessionColour(derivedKey, clientId, hex){
-      if(!derivedKey||!clientId||!hex) return;
-      const map = loadColourMap();
-      const key = `${derivedKey}|${clientId}`;
-      map[key] = String(hex);
-      saveColourMap(map);
-    }
-    function loadSessionColour(derivedKey, clientId){
-      try{
-        const key = `${derivedKey}|${clientId}`;
-        const map = loadColourMap();
-        return map[key] || null;
-      }catch{return null;}
-    }
-
     const LS_KEY="storytag_state_v1", REM_KEY="storytag_remembered_sessions_v1", LAST_KEY="storytag_last_session_v1";
     const saveLocal=s=>localStorage.setItem(LS_KEY,JSON.stringify(s));
     const loadLocal=()=>{ try{return JSON.parse(localStorage.getItem(LS_KEY)||"{}");}catch{return{};} };
@@ -255,34 +236,6 @@
     function setSavedHintText(sid){ const map=loadRememberMap(); savedHint.textContent=(sid&&map[sid])?"Saved on this device — password optional.":""; }
 
     /* ========= Helpers ========= */
-    // ---------- Turn helpers ----------
-    function activePeerId(players, myUid){
-      const now = Date.now();
-      const ids = Object.keys(players||{}).filter(u => u !== myUid);
-      if (!ids.length) return null;
-      // Sort by lastActive desc
-      ids.sort((a,b)=>((players[b]?.lastActive||0) - (players[a]?.lastActive||0)));
-      // Prefer a recently active peer; otherwise, take the most recent seat
-      const fresh = ids.find(u => (now - (players[u]?.lastActive||0)) < STALE_MS);
-      return fresh || ids[0];
-    }
-    async function pruneExtraSeatsIfAny(dbRef, players, myUid){
-      const ids = Object.keys(players||{});
-      if (ids.length <= 2) return;
-      const now = Date.now();
-      // Remove oldest stale seats first (excluding my own seat)
-      const candidates = ids.filter(u => u !== myUid).sort(
-        (a,b)=>((players[a]?.lastActive||0) - (players[b]?.lastActive||0))
-      );
-      for (const uid of candidates){
-        const isStale = (now - (players[uid]?.lastActive||0)) > STALE_MS;
-        if (isStale && Object.keys(players).length > 2){
-          try { await remove(ref(dbRef, `players/${uid}`)); } catch {}
-          delete players[uid];
-        }
-      }
-    }
-
     const WORD_RX=/^[A-Za-z]+(?:['-][A-Za-z]+)*(?:[.,!?])?$/;
     const titleCaseFirstWordIfNeeded=(i,w)=>(i===0&&w.length)?w[0].toUpperCase()+w.slice(1):w;
     const setUIConnected=b=>statusDot.textContent=b?"Connected":"Offline";
@@ -351,7 +304,6 @@
           else { if(!pwd){ if(!auto) joinStatus.innerHTML='<span class="err">Enter a password</span>'; return; }
                  derivedKey=await sha256Base64Url(`${sid}:${pwd}`); }
         }
-        const savedSessionColour = loadSessionColour(derivedKey, clientId);
 
         const sesRef=ref(db,`sessions/${derivedKey}`); const snap=await get(sesRef);
         const exists=snap.exists(); const existing=snap.val()||{}; const players=existing.players||{};
@@ -381,7 +333,7 @@
         }
 
         // --- Create/update player seat (DON'T overwrite colour if seat already exists) ---
-        const defaultColour= (savedSessionColour || colourPicker.value) || `#${Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,"0")}`;
+        const defaultColour= colourPicker.value || `#${Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,"0")}`;
         const myPlayerRef=ref(db,`sessions/${derivedKey}/players/${myUid}`);
         const seatExists = !!players[myUid];
 
@@ -405,95 +357,42 @@
         const myColourNow = (players[myUid]?.colour) || defaultColour;
         colourPicker.value = myColourNow;
         localColour[myUid] = myColourNow;
-        saveSessionColour(derivedKey, clientId, myColourNow);
         setMyColourUI(myColourNow);
 
         // Subscribe to session
         if(window._unsub) window._unsub();
         window._unsub=onValue(sesRef,s=>{
           const val=s.val()||{}; const players=val.players||{}; const words=val.words||[]; let cturn=val.currentTurnUid;
-          const ids=Object.keys(players);
-          const peerId=activePeerId(players, myUid);
+          const ids=Object.keys(players); const peerId=ids.find(k=>k!==myUid);
 
           const meP=presenceOf(players[myUid]?.lastActive); const peP=presenceOf(players[peerId]?.lastActive);
           youPresence.className=`presence ${meP.cls}`; youPresence.textContent=meP.label;
           peerPresence.className=`presence ${peP.cls}`; peerPresence.textContent=peP.label;
 
-          // Prune extra stale seats if they exist (more than 2)
-          pruneExtraSeatsIfAny(ref(db,`sessions/${derivedKey}`), players, myUid);
-
-          // Find the most recent word by me and use its colour as a fallback
-          function lastWordColourBy(uid, wordsArr){
-            if (!Array.isArray(wordsArr)) return null;
-            for (let i = wordsArr.length - 1; i >= 0; i--) {
-              const w = wordsArr[i];
-              if (w && w.by === uid && w.c) return w.c;
-            }
-            return null;
-          }
-
-          // Merge colour: prefer server; only fall back to local if server missing
+          // Merge local colour to avoid flicker
           const mergedPlayers=JSON.parse(JSON.stringify(players||{}));
-          const serverColour = players?.[myUid]?.colour || null;
-          if (serverColour) {
-            // Keep server truth and sync local cache to it
-            localColour[myUid] = serverColour;
-          } else if (localColour[myUid]) {
-            // Use local only when server has nothing yet (e.g., just joined)
-            mergedPlayers[myUid] = mergedPlayers[myUid] || {};
-            mergedPlayers[myUid].colour = localColour[myUid];
-          }
+          if(localColour[myUid]){ mergedPlayers[myUid]=mergedPlayers[myUid]||{}; mergedPlayers[myUid].colour=localColour[myUid]; }
           peerLabel.textContent=peerId?(players[peerId]?.name||"Partner"):"(none)";
 
           // Sync picker & dots to server colour
-          const myEffectiveColour = (players?.[myUid]?.colour) || lastWordColourBy(myUid, words) || savedSessionColour || localColour[myUid] || colourPicker.value || "#58a6ff";
-          if (myEffectiveColour && colourPicker.value.toLowerCase() !== myEffectiveColour.toLowerCase()) {
-            colourPicker.value = myEffectiveColour;
+          const myColourFromServer = mergedPlayers[myUid]?.colour;
+          if (myColourFromServer && colourPicker.value.toLowerCase() !== myColourFromServer.toLowerCase()) {
+            colourPicker.value = myColourFromServer;
           }
-          localColour[myUid] = myEffectiveColour;
-          saveSessionColour(derivedKey, clientId, myEffectiveColour);
-          setMyColourUI(myEffectiveColour);
-          setDotColour(youDot, myEffectiveColour, !!mergedPlayers[myUid]);
-          // If server doesn't have my colour yet, persist it once to players/<myUid>
-          const serverHasColour = !!(players?.[myUid]?.colour);
-          if (!serverHasColour && myEffectiveColour) {
-            try { update(ref(db,`sessions/${derivedKey}/players/${myUid}`), { colour: myEffectiveColour }); } catch {}
-          }
-
-
+          setMyColourUI(myColourFromServer);
+          setDotColour(youDot, myColourFromServer, !!mergedPlayers[myUid]);
           setDotColour(peerDot, mergedPlayers[peerId]?.colour, !!mergedPlayers[peerId]);
-
 
           setUIConnected(ids.length>0);
           renderStory(words,mergedPlayers);
 
-          // If current turn points to a missing seat, recover
-          if(cturn && !players[cturn]){
-            const fallback = activePeerId(players, myUid) || myUid;
-            update(sesRef,{currentTurnUid:fallback});
-            cturn = fallback;
-          }
+          if(cturn && !players[cturn] && ids.length>0){ const newTurn=ids[0]; update(sesRef,{currentTurnUid:newTurn}); cturn=newTurn; }
+          if(ids.length<2 && words.length>0){ submitBtn.disabled=true; wordInput.disabled=true; turnBanner.textContent="Waiting for partner…"; }
+          else setTurnBanner(cturn,players,myUid);
 
-          // Decide if we should auto-pass the turn to the peer after your first word
-          const last = words[words.length-1];
-          const shouldAutoPass = (ids.length >= 2) && last && (last.by === myUid) && (cturn === myUid) && peerId;
-          if (shouldAutoPass) {
-            cturn = peerId; // update local view immediately so UI doesn't grant you another turn
-            update(sesRef,{currentTurnUid:peerId});
-          }
-
-          // Now update the banner/buttons based on the (possibly updated) cturn
-          if(ids.length<2 && words.length>0){
-            submitBtn.disabled=true;
-            wordInput.disabled=true;
-            turnBanner.textContent="Waiting for partner…";
-          } else {
-            setTurnBanner(cturn,players,myUid);
-          }
-
-          const isMyTurn=(cturn===myUid)&&(ids.length===2);
-          if(wasMyTurn===false && isMyTurn) playTurnSound();
-          wasMyTurn=isMyTurn;
+          const last=words[words.length-1]; const isMyTurn=(cturn===myUid)&&(ids.length===2);
+          if(ids.length===2 && last && last.by===myUid && cturn===myUid && peerId){ update(sesRef,{currentTurnUid:peerId}); }
+          if(wasMyTurn===false && isMyTurn) playTurnSound(); wasMyTurn=isMyTurn;
 
           saveLocal({sessionId:sid,myName});
         });
@@ -526,7 +425,7 @@
         const hex=colourPicker.value;
 
         // Instant UI
-        localColour[myUid]=hex; saveSessionColour(last.derivedKey, clientId, hex); setMyColourUI(hex); setDotColour(youDot,hex,true);
+        localColour[myUid]=hex; setMyColourUI(hex); setDotColour(youDot,hex,true);
 
         // Persist
         if(myUid) await update(ref(db,`sessions/${last.derivedKey}/players/${myUid}`),{ colour:hex, lastActive:Date.now() });
@@ -549,7 +448,7 @@
       if(ses.currentTurnUid!==myUid){ errorBox.textContent="Not your turn yet."; wordInput.value=""; return; }
       if(!WORD_RX.test(word)){ errorBox.textContent="Invalid word. Use letters, apostrophes, hyphens, optional .,!? at end."; return; }
 
-      const words=Array.isArray(ses.words)?ses.words:[]; const peerUid=activePeerId(players, myUid);
+      const words=Array.isArray(ses.words)?ses.words:[]; const peerUid=Object.keys(players).find(k=>k!==myUid);
       const myColourNow=(players[myUid]?.colour)||localColour[myUid]||colourPicker.value||"#c6cdff";
 
       try{
