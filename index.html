@@ -482,7 +482,8 @@
           setDotColour(youDot, myEffectiveColour, !!mergedPlayers[myUid]);
           // If server doesn't have my colour yet, persist it once to players/<myUid>
           const serverHasColour = !!(players?.[myUid]?.colour);
-          if (!serverHasColour && myEffectiveColour) {
+          // Only restore from an explicit prior choice
+          if (!serverHasColour && savedSessionColour) {
             try { update(ref(db,`sessions/${derivedKey}/players/${myUid}`), { colour: myEffectiveColour }); } catch {}
           }
 
