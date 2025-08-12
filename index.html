@@ -158,12 +158,6 @@
           copyBtn = $("copyBtn"), downloadBtn = $("downloadBtn"), leaveBtn = $("leaveBtn"),
           errorBox = $("errorBox");
 
-    // State
-    let sessionId = null;        // friendly label (shown in UI)
-    let derivedKey = null;       // hashed key used for Firebase paths
-    let myUid = null, myName = null, peerName = null, unsubSession = null;
-    let audioCtx = null, canPlaySound = false, wasMyTurn = null;
-
     // ----- Stable client id for seat reclaim -----
     const CID_KEY = "storytag_client_id";
     function getClientId() {
@@ -173,14 +167,19 @@
     }
     const clientId = getClientId();
 
-    // Local backups & remembered sessions (no passwords stored)
-    const LS_KEY = "storytag_state_v1";
+    // Local storage keys
+    const LS_KEY = "storytag_state_v1";                   // { sessionId, myName }
+    const REM_KEY = "storytag_remembered_sessions_v1";    // { [sessionId]: derivedKey }
+    const LAST_KEY = "storytag_last_session_v1";          // { sessionId, derivedKey, myName }
+
+    // Helpers: local storage
     function saveLocal(state) { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
     function loadLocal() { try { return JSON.parse(localStorage.getItem(LS_KEY) || "{}"); } catch { return {}; } }
-
-    const REM_KEY = "storytag_remembered_sessions_v1";
     function loadRememberMap(){ try { return JSON.parse(localStorage.getItem(REM_KEY) || "{}"); } catch { return {}; } }
     function saveRememberMap(map){ localStorage.setItem(REM_KEY, JSON.stringify(map)); }
+    function saveLastSession(obj){ localStorage.setItem(LAST_KEY, JSON.stringify(obj || {})); }
+    function loadLastSession(){ try { return JSON.parse(localStorage.getItem(LAST_KEY) || "null"); } catch { return null; } }
+
     function setSavedHintText(sid){
       const map = loadRememberMap();
       if (sid && map[sid]) {
@@ -195,7 +194,7 @@
       } else savedHint.textContent = "";
     }
 
-    // Word regex (letters, apostrophes, hyphens, optional trailing .,!?)
+    // Word regex
     const WORD_RX = /^[A-Za-z]+(?:['-][A-Za-z]+)*(?:[.,!?])?$/;
 
     // Utils
@@ -205,7 +204,7 @@
     function setDotColour(el, colour, present) { el.style.background = present ? (colour || "#666") : "#666"; el.style.boxShadow = "0 0 0 1px rgba(255,255,255,.12) inset"; }
     function setMyColourUI(hex){ if (!hex) return; colourSwatch.style.background = hex; youDot.style.background = hex; }
 
-    // Crypto helpers: SHA-256 + base64url
+    // Crypto: SHA-256 → base64url
     async function sha256Base64Url(input) {
       const enc = new TextEncoder();
       const hash = await crypto.subtle.digest("SHA-256", enc.encode(input));
@@ -226,7 +225,7 @@
       wordCount.textContent = String(words.length);
     }
 
-    function setTurnBanner(currentTurnUid, players) {
+    function setTurnBanner(currentTurnUid, players, myUid) {
       if (!players || !players[myUid]) { turnBanner.textContent = "Waiting…"; return; }
       const mine = currentTurnUid === myUid;
       const theirUid = Object.keys(players).find(k => k !== myUid);
@@ -237,7 +236,8 @@
       submitBtn.disabled = !mine; wordInput.disabled = !mine; if (mine) wordInput.focus();
     }
 
-    // Sound ping
+    // Sound
+    let audioCtx = null, canPlaySound = false, wasMyTurn = null;
     function ensureAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
     function playTurnSound() {
       if (!canPlaySound) return;
@@ -249,38 +249,39 @@
     }
 
     // Prefill & hint
-    (function tryResume() {
+    (function tryPrefill() {
       const saved = loadLocal();
-      if (saved.sessionId && saved.myName) { nameInput.value = saved.myName; sessionInput.value = saved.sessionId; }
-      setSavedHintText(saved.sessionId || "");
+      if (saved.sessionId && saved.myName) { nameInput.value = saved.myName; sessionInput.value = saved.sessionId; setSavedHintText(saved.sessionId); }
     })();
     sessionInput.addEventListener("input", () => setSavedHintText(sessionInput.value.trim()));
 
-    // ---------- Core enter function (mode: 'create' | 'join') ----------
-    async function enterSession(mode) {
-      canPlaySound = true;
+    // ---------- Enter session (mode: 'create' | 'join'); supports silent auto-resume ----------
+    async function enterSession(mode, opts = {}) {
+      const { auto = false } = opts;
+      if (!auto) canPlaySound = true; // auto-resume won't play turn pings until interaction
+
       errorBox.textContent = "";
-      const name = nameInput.value.trim();
-      const sid = sessionInput.value.trim();
-      const pwd = passwordInput.value;
+      const name = (opts.myNameOverride ?? nameInput.value).trim();
+      const sid  = (opts.sessionIdOverride ?? sessionInput.value).trim();
+      const pwd  = opts.passwordOverride ?? passwordInput.value;
 
-      if (!name) { joinStatus.innerHTML = '<span class="err">Enter your name</span>'; return; }
-      if (!sid)  { joinStatus.innerHTML = '<span class="err">Enter a session ID</span>'; return; }
+      if (!name) { if (!auto) joinStatus.innerHTML = '<span class="err">Enter your name</span>'; return; }
+      if (!sid)  { if (!auto) joinStatus.innerHTML = '<span class="err">Enter a session ID</span>'; return; }
 
-      joinBtn.disabled = true; createBtn.disabled = true;
-      joinStatus.textContent = mode === 'create' ? "Creating…" : "Joining…";
+      if (!auto) { joinBtn.disabled = true; createBtn.disabled = true; joinStatus.textContent = mode === 'create' ? "Creating…" : "Joining…"; }
 
       try {
-        // derive or load key
+        // derive/load key
         const remembered = loadRememberMap();
-        if (mode === 'join' && !pwd && remembered[sid]) {
-          derivedKey = remembered[sid];
-        } else {
-          if (!pwd) { joinStatus.innerHTML = '<span class="err">Enter a password</span>'; joinBtn.disabled = false; createBtn.disabled = false; return; }
-          derivedKey = await sha256Base64Url(`${sid}:${pwd}`);
+        let derivedKey = opts.derivedKeyOverride || null;
+        if (!derivedKey) {
+          if (mode === 'join' && !pwd && remembered[sid]) {
+            derivedKey = remembered[sid];
+          } else {
+            if (!pwd) { if (!auto) { joinStatus.innerHTML = '<span class="err">Enter a password</span>'; } return; }
+            derivedKey = await sha256Base64Url(`${sid}:${pwd}`);
+          }
         }
-
-        sessionId = sid;
 
         const sesRef = ref(db, `sessions/${derivedKey}`);
         const snap = await get(sesRef);
@@ -288,42 +289,28 @@
         const existing = snap.val() || {};
         const players = existing.players || {};
 
-        if (mode === 'create' && exists) {
-          joinStatus.innerHTML = '<span class="warn">A session with this ID+password already exists. Use Join instead or pick a different combo.</span>';
-          joinBtn.disabled = false; createBtn.disabled = false;
-          return;
-        }
-        if (mode === 'join' && !exists) {
-          joinStatus.innerHTML = '<span class="warn">No session found for that ID+password. Did you mean to Create?</span>';
-          joinBtn.disabled = false; createBtn.disabled = false;
-          return;
-        }
+        if (mode === 'create' && exists) { if (!auto) joinStatus.innerHTML = '<span class="warn">Session already exists. Use Join.</span>'; return; }
+        if (mode === 'join' && !exists) { if (!auto) joinStatus.innerHTML = '<span class="warn">No session found. Use Create.</span>'; return; }
 
-        // Reuse seat if our clientId already exists
-        let reuseUid = Object.keys(players).find(uid => players[uid]?.clientId === getClientId());
-        myUid = reuseUid || ("u_" + Math.random().toString(36).slice(2, 10));
-        myName = name;
+        // Reuse seat if this clientId is already present
+        let myUid = Object.keys(players).find(uid => players[uid]?.clientId === clientId) || ("u_" + Math.random().toString(36).slice(2, 10));
+        let myName = name;
 
-        // Enforce max 2 seats, BUT allow if we're reclaiming
+        // Enforce max 2 seats unless reclaiming
         const seatCount = Object.keys(players).length;
-        if (seatCount >= 2 && !reuseUid) {
-          joinStatus.innerHTML = '<span class="err">Session is full (2/2)</span>';
-          joinBtn.disabled = false; createBtn.disabled = false; return;
-        }
+        if (seatCount >= 2 && !players[myUid]) { if (!auto) joinStatus.innerHTML = '<span class="err">Session is full (2/2)</span>'; return; }
 
-        // Create session doc if needed
+        // Create session on 'create'
         if (!exists && mode === 'create') {
-          await set(sesRef, { createdAt: serverTimestamp(), friendlyId: sessionId, words: [], currentTurnUid: myUid, players: {} });
+          await set(sesRef, { createdAt: serverTimestamp(), friendlyId: sid, words: [], currentTurnUid: myUid, players: {} });
         } else if (exists && !existing.friendlyId) {
-          await update(sesRef, { friendlyId: existing.friendlyId || sessionId });
+          await update(sesRef, { friendlyId: existing.friendlyId || sid });
         }
 
         // Same-name disambiguation (only if not reclaiming and we’re the second)
-        if (!reuseUid && seatCount === 1) {
+        if (!players[myUid] && seatCount === 1) {
           const [otherUid] = Object.keys(players);
-          if (players[otherUid]?.name?.trim().toLowerCase() === name.toLowerCase()) {
-            myName = `${name} (2)`;
-          }
+          if (players[otherUid]?.name?.trim().toLowerCase() === name.toLowerCase()) myName = `${name} (2)`;
         }
 
         // Default colour
@@ -333,53 +320,51 @@
         const myPlayerRef = ref(db, `sessions/${derivedKey}/players/${myUid}`);
         await set(myPlayerRef, {
           uid: myUid,
-          clientId: getClientId(),
+          clientId,
           name: myName,
           colour: players[myUid]?.colour || defaultColour,
           joinedAt: serverTimestamp()
         });
-
-        // Free seat on disconnect
         onDisconnect(myPlayerRef).remove();
 
-        // Remember this session locally (store derivedKey, never the password)
-        if (rememberChk.checked) {
-          const map = loadRememberMap(); map[sessionId] = derivedKey; saveRememberMap(map);
-          setSavedHintText(sessionId);
+        // Remember session if requested (manual join/create)
+        if (!auto && rememberChk.checked) {
+          const map = loadRememberMap(); map[sid] = derivedKey; saveRememberMap(map); setSavedHintText(sid);
         }
 
-        // UI switch
+        // Save “last session” for auto-resume
+        saveLastSession({ sessionId: sid, derivedKey, myName });
+
+        // Switch UI
         auth.style.display = "none";
         game.style.display = "block";
-        sessionLabel.textContent = sessionId;
+        sessionLabel.textContent = sid;
         youLabel.textContent = myName;
         colourPicker.value = players[myUid]?.colour || defaultColour;
         setMyColourUI(colourPicker.value);
 
-        // Subscribe to session changes
-        if (unsubSession) unsubSession();
-        unsubSession = onValue(sesRef, (s) => {
+        // Subscribe to changes
+        if (window._unsub) window._unsub(); // cleanup any previous
+        window._unsub = onValue(sesRef, (s) => {
           const val = s.val() || {};
           const players = val.players || {};
           const words = val.words || [];
           let cturn = val.currentTurnUid;
           const ids = Object.keys(players);
 
-          // Peer info
+          // Peer
           const peerId = ids.find(k => k !== myUid);
           peerLabel.textContent = peerId ? (players[peerId]?.name || "Partner") : "(none)";
 
-          // Dots use chosen colours (grey if seat missing)
+          // Dots use chosen colours
           setDotColour(youDot, players[myUid]?.colour, !!players[myUid]);
           setDotColour(peerDot, players[peerId]?.colour, !!players[peerId]);
 
-          // Status
+          // Status + story
           setUIConnected(ids.length > 0);
-
-          // Story
           renderStory(words, players);
 
-          // If turn belongs to a missing player, hand to whoever is present
+          // Fix turn if missing player
           if (cturn && !players[cturn] && ids.length > 0) {
             const newTurn = ids[0];
             update(sesRef, { currentTurnUid: newTurn });
@@ -390,7 +375,7 @@
           if (ids.length < 2 && words.length > 0) {
             submitBtn.disabled = true; wordInput.disabled = true; turnBanner.textContent = "Waiting for partner…";
           } else {
-            setTurnBanner(cturn, players);
+            setTurnBanner(cturn, players, myUid);
           }
 
           // Auto-handoff when partner arrives
@@ -399,23 +384,21 @@
             update(sesRef, { currentTurnUid: peerId });
           }
 
-          // Turn sound
+          // Turn sound (only after an interaction; auto-resume won’t ping until you click)
           const isMyTurn = (cturn === myUid) && (ids.length === 2);
           if (wasMyTurn === false && isMyTurn) playTurnSound();
           if (wasMyTurn === null) wasMyTurn = isMyTurn; else wasMyTurn = isMyTurn;
 
-          // Save local (no password stored)
-          saveLocal({ sessionId, myName });
+          // Save lightweight state
+          saveLocal({ sessionId: sid, myName });
         });
 
-        wordInput.focus();
-        joinStatus.innerHTML = '<span class="ok">Ready!</span>';
-
+        if (!auto) { wordInput.focus(); joinStatus.innerHTML = '<span class="ok">Ready!</span>'; }
       } catch (e) {
         console.error(e);
-        joinStatus.innerHTML = '<span class="err">Failed. Check console & Firebase config.</span>';
+        if (!auto) joinStatus.innerHTML = '<span class="err">Failed. Check console & Firebase config.</span>';
       } finally {
-        joinBtn.disabled = false; createBtn.disabled = false;
+        if (!auto) { joinBtn.disabled = false; createBtn.disabled = false; }
       }
     }
 
@@ -423,13 +406,21 @@
     createBtn.onclick = () => enterSession('create');
     joinBtn.onclick = () => enterSession('join');
 
-    // Colour picker change -> update swatch + Firebase
+    // Colour picker change
     colourPicker.addEventListener("input", async () => {
       try {
-        if (!derivedKey || !myUid) return;
-        const hex = colourPicker.value;
-        setMyColourUI(hex);
-        await update(ref(db, `sessions/${derivedKey}/players/${myUid}`), { colour: hex });
+        const last = loadLastSession();
+        if (!last) return;
+        const { derivedKey } = last;
+        const myColour = colourPicker.value;
+        setMyColourUI(myColour);
+
+        // we need myUid to write colour — we don’t store it; so update our seat by clientId
+        const sesRef = ref(db, `sessions/${derivedKey}`);
+        const snap = await get(sesRef);
+        const players = (snap.val() && snap.val().players) || {};
+        const myUid = Object.keys(players).find(uid => players[uid]?.clientId === clientId);
+        if (myUid) await update(ref(db, `sessions/${derivedKey}/players/${myUid}`), { colour: myColour });
       } catch (e) { console.error(e); }
     });
 
@@ -439,23 +430,30 @@
       let word = (wordInput.value || "").trim();
       if (!word) return;
 
+      const last = loadLastSession();
+      if (!last) { errorBox.textContent = "No active session."; return; }
+      const { derivedKey } = last;
+
       const sesRef = ref(db, `sessions/${derivedKey}`);
       const sesSnap = await get(sesRef);
       const ses = sesSnap.val();
       if (!ses) { errorBox.textContent = "Session not found."; return; }
 
+      // Find myUid by clientId
+      const players = ses.players || {};
+      const myUid = Object.keys(players).find(uid => players[uid]?.clientId === clientId);
+      if (!myUid) { errorBox.textContent = "Rejoin required."; return; }
+
       if (ses.currentTurnUid !== myUid) { errorBox.textContent = "Not your turn yet."; wordInput.value = ""; return; }
       if (!WORD_RX.test(word)) { errorBox.textContent = "Invalid word. Use letters, apostrophes, hyphens, optional .,!? at end."; return; }
 
       const words = Array.isArray(ses.words) ? ses.words : [];
-      const players = ses.players || {};
       const peerUid = Object.keys(players).find(k => k !== myUid);
 
       try {
-        const nextTurnUid = peerUid || myUid;
         await update(sesRef, {
           words: [...words, { w: titleCaseFirstWordIfNeeded(words.length, word), by: myUid, t: Date.now() }],
-          currentTurnUid: nextTurnUid
+          currentTurnUid: peerUid || myUid
         });
 
         if (!peerUid) { submitBtn.disabled = true; wordInput.disabled = true; turnBanner.textContent = "Waiting for partner…"; }
@@ -470,12 +468,30 @@
       copyBtn.textContent = "Copied!"; setTimeout(() => (copyBtn.textContent = "Copy story"), 1200);
     };
     downloadBtn.onclick = () => {
+      const last = loadLastSession();
+      const fileSid = last?.sessionId || "session";
       const text = [...document.querySelectorAll("#storyBox .word")].map(el => el.textContent).join(" ");
       const blob = new Blob([text], { type: "text/plain" });
       const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-      a.download = `story-${sessionId || "session"}.txt`; a.click(); URL.revokeObjectURL(a.href);
+      a.download = `story-${fileSid}.txt`; a.click(); URL.revokeObjectURL(a.href);
     };
-    leaveBtn.onclick = async () => { try { if (derivedKey && myUid) await remove(ref(db, `sessions/${derivedKey}/players/${myUid}`)); } catch {} location.reload(); };
+    leaveBtn.onclick = async () => {
+      try {
+        const last = loadLastSession();
+        if (last) {
+          const { derivedKey } = last;
+          // remove my seat if present
+          const sesRef = ref(db, `sessions/${derivedKey}`);
+          const snap = await get(sesRef);
+          const players = (snap.val() && snap.val().players) || {};
+          const myUid = Object.keys(players).find(uid => players[uid]?.clientId === clientId);
+          if (myUid) await remove(ref(db, `sessions/${derivedKey}/players/${myUid}`));
+        }
+      } catch {}
+      // clear auto-resume + go to login
+      saveLastSession(null);
+      location.reload();
+    };
 
     // Keyboard shortcuts
     wordInput.addEventListener("keydown", (e) => { if (e.key === "Enter") submitBtn.click(); });
@@ -484,6 +500,25 @@
 
     // Minor status tweak on tab hide/show
     document.addEventListener("visibilitychange", () => { statusDot.textContent = document.hidden ? "Background" : "Connected"; });
+
+    // -------- Auto-resume on load --------
+    (async function autoResume() {
+      const last = loadLastSession();
+      if (!last) return; // no previous session
+      // Pre-fill UI (in case resume fails we show the form with values)
+      const saved = loadLocal();
+      if (last.sessionId) sessionInput.value = last.sessionId;
+      if (last.myName) { nameInput.value = last.myName; }
+      setSavedHintText(last.sessionId || "");
+
+      // Try silent join of the last session
+      await enterSession('join', {
+        auto: true,
+        sessionIdOverride: last.sessionId || "",
+        myNameOverride: last.myName || "",
+        derivedKeyOverride: last.derivedKey || null
+      });
+    })();
   </script>
 
   <div style="position:fixed;bottom:10px;left:50%;transform:translateX(-50%);font-size:12px;color:#9aa3d7;">
