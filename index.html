@@ -318,6 +318,19 @@
       }catch{}
     }
 /* ========= Helpers ========= */
+    // Choose the peer deterministically based on who wrote last.
+    // Prefer the most recently active seat that is NOT the last writer; tie-break by uid.
+    function peerOfLastWriter(players, lastBy){
+      const ids = Object.keys(players||{}).filter(u => u !== lastBy);
+      if (ids.length === 1) return ids[0] || null;
+      ids.sort((a,b)=>{
+        const da=(players[a]?.lastActive||0), db=(players[b]?.lastActive||0);
+        if (db!==da) return db-da;
+        return String(a).localeCompare(String(b));
+      });
+      return ids[0] || null;
+    }
+
     // ---------- Turn helpers ----------
     function activePeerId(players, myUid){
       const now = Date.now();
